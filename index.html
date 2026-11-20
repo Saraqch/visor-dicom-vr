@@ -1,0 +1,1751 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bases del Visor DICOM VR</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* Layout: sala de lectura radiológica. Panel de conceptos a la izquierda, simulador en vivo a la derecha; una lámina por tema. */
+:root{
+  --bg:#ffffff; --panel:#f6f8fa; --panel-2:#eef2f6; --line:#d8dee6; --fg:#16202b; --muted:#566578;
+  --accent:#b26b00; --cyan:#0b7a84; --ax:#d03a3a; --cor:#2563b0; --sag:#2a8450;
+  --f-display:"Space Grotesk","Segoe UI",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",Consolas,"Courier New",monospace;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:clamp(14px,1.02vw,18px);line-height:1.5}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.deck{height:100%;display:flex;flex-direction:column}
+.topbar{display:flex;align-items:center;gap:14px;padding-block:8px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));border-bottom:1px solid var(--line);background:var(--bg)}
+.brand{font-family:var(--f-display);font-weight:600;font-size:.95em;white-space:nowrap}
+.brand b{color:var(--accent);font-weight:600}
+.crumbs{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto;justify-content:flex-end}
+.crumb{font:600 .72em var(--f-mono);padding:4px 8px;border-radius:4px;border:1px solid var(--line);color:var(--muted);background:none;cursor:pointer}
+.crumb:hover{border-color:var(--muted)}
+.crumb.on{color:var(--bg);background:var(--accent);border-color:var(--accent)}
+.stage{flex:1;min-height:0;position:relative}
+.slide{position:absolute;inset:0;display:none;grid-template-columns:minmax(320px,35%) minmax(0,1fr);min-height:0}
+.slide.on{display:grid}
+.notes{overflow:auto;padding:26px 30px 30px;border-right:1px solid var(--line);background:var(--panel);min-width:0;display:flex;flex-direction:column;gap:16px}
+.sim{overflow:auto;padding:20px 24px;min-width:0;display:flex;flex-direction:column;gap:14px}
+.kicker{font:600 .78em var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0;line-height:1.15}
+h1{font-size:2.3em;font-weight:700}
+h2{font-size:1.75em;font-weight:600}
+h3{font-size:.8em;font-family:var(--f-mono);text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+p{margin:0}
+.lead{color:var(--muted);font-size:1.05em}
+.what{border-left:3px solid var(--cyan);padding:2px 0 2px 14px}
+.what strong{color:var(--cyan)}
+dl.cx{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:0;font-size:.93em}
+dl.cx dt{font-weight:600;white-space:nowrap}
+dl.cx dd{margin:0;color:var(--muted)}
+.fx{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:10px 14px;display:flex;flex-direction:column;gap:4px}
+.fx .t{font-size:.8em;color:var(--muted)}
+.fx .m{font-family:var(--f-mono);font-size:.95em;overflow-x:auto;white-space:nowrap}
+.fx .live{font-family:var(--f-mono);font-size:.88em;color:var(--accent);white-space:normal;overflow-wrap:anywhere}
+ol.steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px;counter-reset:st}
+ol.steps li{display:grid;grid-template-columns:1.8em minmax(0,1fr);gap:10px;align-items:start}
+ol.steps li::before{counter-increment:st;content:counter(st);width:1.8em;height:1.8em;border-radius:50%;border:1px solid var(--accent);color:var(--accent);font:600 .8em var(--f-mono);display:grid;place-items:center;margin-top:.15em}
+.simple{background:linear-gradient(135deg,rgba(242,184,75,.13),rgba(98,210,216,.07));border:1px solid rgba(242,184,75,.35);border-radius:12px;padding:12px 15px;font-size:1.02em}
+.simple b.l{display:block;font:600 .7em var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin-bottom:4px}
+ol.steps li[data-act],ol.steps li{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--panel-2)}
+ol.steps li[data-act]{cursor:pointer;grid-template-columns:1.8em minmax(0,1fr) auto;transition:border-color .2s,transform .2s}
+ol.steps li[data-act]::after{content:"▶";color:var(--accent);font-size:.75em;align-self:center;opacity:.7}
+ol.steps li[data-act]:hover{border-color:var(--accent);transform:translateX(3px)}
+ol.steps li.cur{border-color:var(--accent);background:rgba(242,184,75,.1)}
+.meter{height:14px;border-radius:7px;background:var(--panel-2);border:1px solid var(--line);overflow:hidden}
+.meter i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--ax),var(--accent),var(--sag));transition:width .2s}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-size:.82em;padding:3px 10px;border-radius:999px;background:var(--panel-2);border:1px solid var(--line)}
+ul.use{margin:0;padding-left:1.1em;display:flex;flex-direction:column;gap:4px}
+ul.use li::marker{color:var(--accent)}
+.row{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.card h3{display:flex;align-items:center;gap:8px}
+.grow{flex:1 1 300px}
+canvas.cv{display:block;width:100%;background:#000;border-radius:6px;touch-action:none}
+.sq{width:100%;max-width:min(100%,62vh);aspect-ratio:1/1;height:auto;margin-inline:auto}
+.ctls{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px 18px}
+.ctl{display:grid;grid-template-columns:auto 1fr 4.2em;align-items:center;gap:10px;font-size:.88em}
+.ctl span{color:var(--muted)}
+.ctl output{font-family:var(--f-mono);text-align:right;font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.btns{display:flex;gap:6px;flex-wrap:wrap}
+.btn{border:1px solid var(--line);background:var(--panel-2);border-radius:6px;padding:5px 11px;cursor:pointer;font-size:.86em}
+.btn:hover{border-color:var(--muted)}
+.btn.on{border-color:var(--accent);color:var(--accent)}
+.chk{display:inline-flex;gap:8px;align-items:center;font-size:.88em;color:var(--muted);cursor:pointer}
+.chk input{accent-color:var(--accent)}
+.ro{font-family:var(--f-mono);font-size:.86em;display:grid;grid-template-columns:auto 1fr;gap:3px 14px;font-variant-numeric:tabular-nums}
+.ro span:nth-child(odd){color:var(--muted)}
+.hint{font-size:.8em;color:var(--muted)}
+.tag{display:inline-block;font:600 .72em var(--f-mono);padding:2px 6px;border-radius:4px;border:1px solid var(--line);color:var(--muted)}
+.tag.today{border-color:var(--accent);color:var(--accent)}
+.dot{width:10px;height:10px;border-radius:2px;display:inline-block}
+.mat{display:inline-grid;grid-template-columns:repeat(var(--c),auto);gap:2px 12px;padding:4px 10px;border-left:2px solid var(--fg);border-right:2px solid var(--fg);border-radius:6px;font-family:var(--f-mono);font-size:.85em;text-align:right;font-variant-numeric:tabular-nums;vertical-align:middle}
+.mat.hl span:last-child{color:var(--accent)}
+.eq{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-family:var(--f-mono);font-size:.9em}
+table.mx{border-collapse:collapse;font-family:var(--f-mono);font-size:.72em;font-variant-numeric:tabular-nums}
+table.mx td{width:3.6em;height:2.1em;text-align:center;border:1px solid var(--line)}
+table.mx td.c{outline:2px solid var(--accent);outline-offset:-2px}
+.mxwrap{overflow-x:auto}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:.82em;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.pipe{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.step{text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;cursor:pointer;display:flex;flex-direction:column;gap:6px;position:relative}
+.step:hover{border-color:var(--muted)}
+.step.on{border-color:var(--accent);background:var(--panel-2)}
+.step .n{font:600 .75em var(--f-mono);color:var(--accent)}
+.step .nm{font-family:var(--f-display);font-weight:600;font-size:1.05em}
+.step .tags{display:flex;gap:4px;flex-wrap:wrap}
+.detail{background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:8px}
+.flow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-family:var(--f-mono);font-size:.85em}
+.flow b{background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:4px 9px;font-weight:600}
+.flow i{color:var(--accent);font-style:normal}
+.hdr{font-family:var(--f-mono);font-size:.8em;display:grid;grid-template-columns:auto auto 1fr;gap:3px 12px;font-variant-numeric:tabular-nums}
+.hdr .g{color:var(--muted)}
+.hdr .v{color:var(--accent)}
+.names{border:1px dashed var(--line);border-radius:8px;padding:8px 12px;min-height:2.2em}
+.names:empty::before{content:attr(data-ph);color:var(--muted)}
+.sum{width:100%;border-collapse:collapse;font-size:.92em}
+.sum th,.sum td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+.sum th{font:600 .75em var(--f-mono);text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.sum td:first-child{font-family:var(--f-mono);color:var(--accent);white-space:nowrap}
+.foot{display:flex;align-items:center;gap:10px;padding-block:8px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));border-top:1px solid var(--line);font-size:.85em;color:var(--muted)}
+.foot .sp{flex:1}
+.nav{border:1px solid var(--line);background:var(--panel-2);border-radius:6px;padding:5px 14px;cursor:pointer}
+.nav:hover{border-color:var(--accent)}
+.badge{font:600 .72em var(--f-mono);color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:2px 6px}
+.ok{color:var(--sag)} .bad{color:var(--ax)}
+@media (max-width:900px){
+  .stage{overflow:auto}
+  .slide{position:static;grid-template-columns:minmax(0,1fr)}
+  .notes{border-right:0;border-bottom:1px solid var(--line);overflow:visible}
+  .sim{overflow:visible}
+  .brand{display:none}
+  .sq{max-width:100%}
+}
+#tour{position:fixed;left:max(16px,env(safe-area-inset-left,0px));right:max(16px,env(safe-area-inset-right,0px));bottom:calc(58px + env(safe-area-inset-bottom,0px));z-index:50;background:rgba(255,255,255,.97);border:2px solid var(--accent);border-radius:12px;padding:12px 16px;display:flex;gap:16px;align-items:center;box-shadow:0 10px 40px rgba(0,0,0,.6)}
+#tour[hidden]{display:none}
+#tour .tt{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+#tour p{font-size:1.15em;line-height:1.45}
+#tour .tc{display:flex;gap:8px;flex-wrap:wrap}
+.flash{animation:flash 1.4s ease-out}
+@keyframes flash{0%{outline:3px solid var(--accent);outline-offset:4px;box-shadow:0 0 0 8px rgba(242,184,75,.35)}100%{outline:3px solid transparent;outline-offset:4px;box-shadow:0 0 0 0 rgba(242,184,75,0)}}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto}.flash{animation:none;outline:3px solid var(--accent)}}
+</style>
+</head>
+<body>
+<div class="deck">
+  <header class="topbar">
+    <div class="brand">Visor DICOM <b>VR</b> · Bases matemáticas</div>
+    <nav class="crumbs" id="crumbs" aria-label="Láminas"></nav>
+  </header>
+
+  <main class="stage" id="stage">
+
+  <!-- ============ 0 PORTADA ============ -->
+  <section class="slide" id="portada" data-crumb="Inicio">
+    <div class="notes">
+      <div class="kicker">Graficación por Computadora · Propuesta 4</div>
+      <h1>Sistema de visualización y planificación quirúrgica en realidad virtual</h1>
+      <p class="lead">Las bases matemáticas del proyecto, del tema <b>3.1 al 3.11</b>. Cada lámina responde una pregunta y la muestra en vivo.</p>
+      <div class="fx">
+        <div class="t">Integrantes</div>
+        <div style="font-size:1.25em;font-weight:600">Sara Quispe · Kevin Paniagua</div>
+      </div>
+      <p class="hint">Datos de prueba: un tórax simulado, generado en el navegador.</p>
+      <p class="hint">Teclas: <b>→</b> / <b>←</b> para avanzar o retroceder · <b>F</b> pantalla completa · arrastra los modelos 3D para girarlos.</p>
+    </div>
+    <div class="sim">
+      <div class="card grow">
+        <h3>Render volumétrico en vivo <span class="badge" id="fps0"></span></h3>
+        <canvas class="cv sq" id="cv0"></canvas>
+        <div class="legend">
+          <span><i class="dot" style="background:#f4ecdc"></i>Hueso</span>
+          <span><i class="dot" style="background:#e5262e"></i>Vaso con contraste</span>
+          <span><i class="dot" style="background:#ffb833"></i>Tumor (simulado)</span>
+          <span><i class="dot" style="background:#d96b61"></i>Tejido blando</span>
+        </div>
+        <p class="hint">Esta imagen se calcula en el navegador con la matemática de esta presentación: el tensor (3.1), coordenadas en mm (3.2), gradientes para la luz (3.3), rotaciones (3.4) y la matriz 4×4 (3.5).</p>
+        <label class="chk"><input type="checkbox" id="spin0" checked> Girar automáticamente</label>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 1 PROYECTO ============ -->
+  <section class="slide" id="proyecto" data-crumb="Proyecto">
+    <div class="notes">
+      <div class="kicker">Contexto</div>
+      <h2>¿Qué problema resolvemos?</h2>
+      <div class="simple"><b class="l">En simple</b>El médico ve la tomografía en rebanadas planas y tiene que <b>imaginarse</b> el cuerpo en 3D. Queremos mostrarlo en realidad virtual y <b>avisar si una aguja va a chocar</b> con algo importante.</div>
+      <p>La solución es un <b>pipeline</b>: una cadena de pasos donde lo que sale de uno entra al siguiente, como una fábrica con estaciones.</p>
+      <p>Cada estación usa uno o más temas de matemática. En esta presentación vemos los <b>11 temas</b>.</p>
+      <p class="hint">Toca cada estación del pipeline para ver qué hace y qué temas usa.</p>
+    </div>
+    <div class="sim">
+      <h3>Pipeline del sistema</h3>
+      <div class="pipe" id="pipe"></div>
+      <div class="detail" id="pipeDetail"></div>
+    </div>
+  </section>
+
+  <!-- ============ 2 DATOS ============ -->
+  <section class="slide" id="datos" data-crumb="Datos">
+    <div class="notes">
+      <div class="kicker">Datos de entrada</div>
+      <h2>Tomografía y archivos DICOM</h2>
+      <div class="what"><p><strong>Tomografía (TC):</strong> rayos X que giran alrededor del paciente y producen <b>rebanadas</b> del cuerpo. Apiladas, forman el volumen 3D.</p></div>
+      <p><b>DICOM</b> es el formato estándar de imágenes médicas (archivos <code>.dcm</code>). Cada archivo es <b>una rebanada</b> y trae, además de la imagen, <b>metadatos</b> que usamos en la matemática:</p>
+      <dl class="cx">
+        <dt>ImagePositionPatient</dt><dd>Posición en mm del primer pixel → origen (3.2)</dd>
+        <dt>PixelSpacing</dt><dd>Tamaño del pixel en mm → escala (3.2, 3.4)</dd>
+        <dt>SliceThickness</dt><dd>Separación entre rebanadas → Δz</dd>
+        <dt>ImageOrientationPatient</dt><dd>Direcciones de filas y columnas → ejes (3.2, 3.5)</dd>
+        <dt>RescaleSlope / Intercept</dt><dd>Para convertir a unidades Hounsfield (3.1)</dd>
+      </dl>
+      <p class="hint">Datos simulados: un fantoma de tórax generado en el navegador (128 × 128 × 64 voxels). Una TC real tiene cerca de 512 × 512 × 300; la matemática es la misma.</p>
+    </div>
+    <div class="sim">
+      <div class="row">
+        <div class="card grow">
+          <h3>La pila de rebanadas</h3>
+          <canvas class="cv sq" id="cvStack"></canvas>
+        </div>
+        <div class="card grow">
+          <h3>Rebanada seleccionada</h3>
+          <canvas class="cv sq" id="cvSl"></canvas>
+        </div>
+      </div>
+      <label class="ctl"><span>Rebanada k</span><input type="range" id="k2" min="0" max="63" value="39"><output id="k2o"></output></label>
+      <div class="card">
+        <h3>Cabecera DICOM de esta rebanada</h3>
+        <div class="hdr" id="hdr"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 3.1 ============ -->
+  <section class="slide" id="t3-1" data-crumb="3.1">
+    <div class="notes">
+      <div class="kicker">3.1 · Álgebra lineal e imágenes</div>
+      <h2>¿Cómo encuentra el sistema el tumor entre millones de números?</h2>
+      <div class="simple"><b class="l">En simple</b>Imagina una <b>hoja cuadriculada</b> con un número en cada cuadrito: número bajo = oscuro, número alto = claro. Apila 64 hojas y tienes un <b>cubo de números</b>. Eso es la tomografía para la computadora.</div>
+      <h3>Paso a paso · toca cada paso</h3>
+      <ol class="steps">
+        <li data-act="ptr:cv31:.707:.457:pointermove"><span><b>La imagen es una tabla.</b> Cada pixel guarda un número: eso es una matriz. Mira la tabla 7 × 7.</span></li>
+        <li data-act="btn:pre31:1"><span><b>Todos en la misma escala.</b> Los números se pasan a Hounsfield: aire −1000, agua 0, hueso +700.</span></li>
+        <li data-act="btn:pre31:2"><span><b>Ventaneo, para ver.</b> Solo hay 256 grises: elegimos un rango y lo estiramos de negro a blanco.</span></li>
+        <li data-act="btn:segp31:0"><span><b>Umbral, para encontrar.</b> Se pintan los voxels entre 75 y 125: ese es el tumor. Contándolos sale su tamaño.</span></li>
+      </ol>
+      <div class="fx"><div class="t">La cuenta</div>
+        <div class="m">HU = valor · 1 − 1024</div><div class="live" id="f31a"></div>
+        <div class="m">gris = 255 · (HU − inicio) / ancho</div><div class="live" id="f31b"></div>
+        <div class="m">volumen = voxels × 31.25 mm³</div><div class="live" id="f31c"></div></div>
+      <h3>Del tema usamos</h3>
+      <div class="chips"><span class="chip">Matriz</span><span class="chip">Tensor</span><span class="chip">Índice V[k][i][j]</span><span class="chip">Operación elemento a elemento</span><span class="chip">Función lineal y = m·x + b</span></div>
+    </div>
+    <div class="sim">
+      <div class="row">
+        <div class="card grow">
+          <h3>Rebanada k = <span id="k31t"></span> · pasa el mouse</h3>
+          <canvas class="cv sq" id="cv31"></canvas>
+        </div>
+        <div class="card grow">
+          <h3>La imagen vista como matriz (7 × 7 alrededor del cursor)</h3>
+          <div class="mxwrap"><table class="mx" id="mx31"></table></div>
+          <div class="ro" id="ro31"></div>
+          <h3>Función de ventana</h3>
+          <canvas class="cv" id="tf31" style="aspect-ratio:2.2/1"></canvas>
+        </div>
+      </div>
+      <div class="ctls">
+        <label class="ctl"><span>Rebanada k</span><input type="range" id="k31" min="0" max="63" value="39"><output id="k31o"></output></label>
+        <label class="ctl"><span>Centro WL</span><input type="range" id="wl31" min="-1000" max="1000" step="10" value="40"><output id="wl31o"></output></label>
+        <label class="ctl"><span>Ancho WW</span><input type="range" id="ww31" min="10" max="2500" step="10" value="400"><output id="ww31o"></output></label>
+      </div>
+      <div class="btns" id="pre31">
+        <button class="btn" data-wl="-600" data-ww="1500">Pulmón</button>
+        <button class="btn on" data-wl="40" data-ww="400">Tejido blando</button>
+        <button class="btn" data-wl="400" data-ww="1800">Hueso</button>
+      </div>
+      <div class="card">
+        <h3>Paso 4 · segmentación por umbral</h3>
+        <div class="row" style="align-items:center">
+          <div class="btns" id="segp31">
+            <button class="btn on" data-a="75" data-b="125">Tumor (75 a 125 HU)</button>
+            <button class="btn" data-a="250" data-b="3000">Hueso (≥ 250 HU)</button>
+            <button class="btn" data-a="-950" data-b="-500">Pulmón (−950 a −500 HU)</button>
+          </div>
+          <label class="chk"><input type="checkbox" id="seg31" checked> Pintar en la imagen</label>
+        </div>
+        <div class="ro" id="seg31o"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 3.2 ============ -->
+  <section class="slide" id="t3-2" data-crumb="3.2">
+    <div class="notes">
+      <div class="kicker">3.2 · Sistemas de coordenadas</div>
+      <h2>¿Dónde está cada punto en el cuerpo real?</h2>
+      <div class="simple"><b class="l">En simple</b>Tu entrada de cine dice <b>"fila 5, asiento 3"</b>, pero no a cuántos metros estás de la pantalla. Para saberlo necesitas <b>dónde empieza</b> la primera fila y <b>cuánto mide</b> cada asiento.</div>
+      <h3>Paso a paso · toca cada paso</h3>
+      <ol class="steps">
+        <li data-act="ptr:cv32a:.707:.457"><span><b>Elige un voxel.</b> Tiene una dirección de tabla: fila, columna y rebanada.</span></li>
+        <li data-act="ptr:cv32a:.3:.62"><span><b>Pásalo a milímetros.</b> posición = inicio + pasos × tamaño del paso.</span></li>
+        <li data-act="btn:dz32:1"><span><b>Cuidado con los ladrillos.</b> Los voxels miden 2.5 × 2.5 × 5 mm. Si se dibujan como cubos, el cuerpo sale aplastado.</span></li>
+        <li data-act="btn:dz32:0"><span><b>Todo en mm.</b> Así las distancias de la cirugía son reales.</span></li>
+      </ol>
+      <div class="flow"><b>voxel (i, j, k)</b><i>→</i><b>paciente (x, y, z) mm</b><i>→</i><b>pantalla (u, v) px</b></div>
+      <div class="fx"><div class="t">La cuenta con el punto elegido</div>
+        <div class="live" id="f32a"></div><div class="live" id="f32b"></div><div class="live" id="f32c"></div></div>
+      <h3>Del tema usamos</h3>
+      <div class="chips"><span class="chip">Origen</span><span class="chip">Ejes x, y, z</span><span class="chip">Coordenadas discretas y continuas</span><span class="chip">Escala</span><span class="chip">Cambio de sistema</span></div>
+    </div>
+    <div class="sim">
+      <div class="row">
+        <div class="card grow">
+          <h3><i class="dot" style="background:var(--ax)"></i>Axial · haz clic en un punto</h3>
+          <canvas class="cv sq" id="cv32a"></canvas>
+          <label class="chk"><input type="checkbox" id="grid32"> Mostrar la rejilla de voxels</label>
+        </div>
+        <div class="card grow">
+          <h3><i class="dot" style="background:var(--cor)"></i>Coronal reconstruida</h3>
+          <canvas class="cv sq" id="cv32c"></canvas>
+          <div class="btns" id="dz32">
+            <button class="btn on" data-v="real">Δz = 5 mm (correcto)</button>
+            <button class="btn" data-v="cubo">Voxel como cubo (incorrecto)</button>
+          </div>
+        </div>
+      </div>
+      <label class="ctl"><span>Rebanada k</span><input type="range" id="k32" min="0" max="63" value="39"><output id="k32o"></output></label>
+      <div class="card"><div class="ro" id="ro32"></div></div>
+    </div>
+  </section>
+
+  <!-- ============ 3.3 ============ -->
+  <section class="slide" id="t3-3" data-crumb="3.3">
+    <div class="notes">
+      <div class="kicker">3.3 · Vectores</div>
+      <h2>¿Dónde termina un órgano? ¿La aguja choca?</h2>
+      <div class="simple"><b class="l">En simple</b>Imagina un <b>cerro</b>: una flecha apunta hacia donde sube más empinado. En terreno plano la flecha es casi cero; en un <b>barranco</b> (el borde de un órgano) es enorme. Esa flecha se llama gradiente.</div>
+      <h3>Paso a paso · toca cada paso</h3>
+      <ol class="steps">
+        <li data-act="ptr:cv33a:.17:.48:pointermove|btn:mode33:1"><span><b>Encontrar bordes.</b> Se resta el vecino de adelante menos el de atrás: en un borde el resultado es grande.</span></li>
+        <li data-act="btn:mode33:0|range:az33:-60"><span><b>Dar luz.</b> La flecha del borde se compara con la luz (producto punto): de frente brilla, de costado se oscurece.</span></li>
+        <li data-act="btn:nd33:0"><span><b>Trazar la aguja.</b> Es una flecha de la entrada E al tumor T.</span></li>
+        <li data-act="btn:nd33:1"><span><b>¿Choca?</b> Se busca el punto de la aguja más cercano a cada estructura. A menos de 10 mm, o si la cruza: alerta.</span></li>
+      </ol>
+      <div class="fx"><div class="t">La cuenta del borde (bajo el cursor)</div><div class="live" id="f33a"></div><div class="live" id="f33b"></div></div>
+      <div class="fx"><div class="t">La cuenta de la luz (pasa el mouse sobre el 3D)</div><div class="m">brillo = 0.16 + 0.84 · máx(0, N·L)</div><div class="live" id="f33c"></div></div>
+      <div class="fx"><div class="t">La cuenta de la aguja</div><div class="live" id="f33u"></div><div class="live" id="f33d"></div><div class="live" id="f33e"></div><div class="live" id="f33f"></div></div>
+      <h3>Del tema usamos</h3>
+      <div class="chips"><span class="chip">Resta de puntos</span><span class="chip">Magnitud</span><span class="chip">Normalizar</span><span class="chip">Producto punto</span><span class="chip">Producto cruz</span><span class="chip">Gradiente</span><span class="chip">Distancia</span></div>
+    </div>
+    <div class="sim">
+      <div class="row">
+        <div class="card grow">
+          <h3>Gradiente en la rebanada</h3>
+          <canvas class="cv sq" id="cv33a"></canvas>
+          <div class="btns" id="mode33">
+            <button class="btn on" data-v="img">Imagen</button>
+            <button class="btn" data-v="mag">Magnitud |∇I|</button>
+          </div>
+          <label class="chk"><input type="checkbox" id="arr33" checked> Flechas del gradiente</label>
+          <div class="btns" id="nd33">
+            <button class="btn on" data-x="132" data-y="-45">Entrada lateral</button>
+            <button class="btn" data-x="-25" data-y="90">Entrada posterior</button>
+            <button class="btn" data-x="-20" data-y="-95">Entrada anterior</button>
+          </div>
+          <p class="hint">Haz clic en la imagen para mover la entrada E de la aguja. T es el tumor.</p>
+          <div id="nd33o" class="hint"></div>
+        </div>
+        <div class="card grow">
+          <h3>Superficie 3D iluminada · arrastra para girar</h3>
+          <canvas class="cv sq" id="cv33b"></canvas>
+          <div class="btns" id="iso33">
+            <button class="btn on" data-v="300">Hueso (300 HU)</button>
+            <button class="btn" data-v="-300">Piel (−300 HU)</button>
+          </div>
+          <label class="chk"><input type="checkbox" id="lit33" checked> Iluminación (N·L)</label>
+        </div>
+      </div>
+      <div class="ctls">
+        <label class="ctl"><span>Rebanada k</span><input type="range" id="k33" min="1" max="62" value="39"><output id="k33o"></output></label>
+        <label class="ctl"><span>Luz horizontal</span><input type="range" id="az33" min="-90" max="90" value="35"><output id="az33o"></output></label>
+        <label class="ctl"><span>Luz vertical</span><input type="range" id="el33" min="-80" max="80" value="30"><output id="el33o"></output></label>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 3.4 ============ -->
+  <section class="slide" id="t3-4" data-crumb="3.4">
+    <div class="notes">
+      <div class="kicker">3.4 · Transformaciones lineales</div>
+      <h2>¿Cómo se ve el cuerpo de frente y de costado?</h2>
+      <div class="simple"><b class="l">En simple</b>Una <b>gelatina con frutas</b> se puede cortar acostada, de frente o de costado. Es la misma gelatina: solo cambia la dirección del cuchillo. Las matrices hacen eso con el cubo de números.</div>
+      <h3>Paso a paso · toca cada paso</h3>
+      <ol class="steps">
+        <li data-act="ptr:cv34a:.5:.62"><span><b>Tres cortes del mismo cubo.</b> Cada vista es una matriz que elige dos ejes: axial (x, y), coronal (x, z), sagital (y, z).</span></li>
+        <li data-act="check:sc34:0"><span><b>Estirar.</b> La matriz de escala corrige el tamaño de los voxels. Sin ella, todo sale aplastado.</span></li>
+        <li data-act="check:sc34:1"><span><b>Girar.</b> Al mover la cabeza, cada punto se multiplica por la matriz de rotación R. Arrastra el cubo.</span></li>
+        <li><span><b>Combinar.</b> Escala y giro en una sola matriz: M = R · S. El orden importa, como medias antes que zapatos.</span></li>
+      </ol>
+      <div class="fx"><div class="t">Las matrices de vista</div>
+        <div class="eq"><span>axial</span><span class="mat" style="--c:3"><span>1</span><span>0</span><span>0</span><span>0</span><span>1</span><span>0</span></span>
+        <span>coronal</span><span class="mat" style="--c:3"><span>1</span><span>0</span><span>0</span><span>0</span><span>0</span><span>1</span></span>
+        <span>sagital</span><span class="mat" style="--c:3"><span>0</span><span>1</span><span>0</span><span>0</span><span>0</span><span>1</span></span></div></div>
+      <div class="fx"><div class="t">La escala, en vivo</div><div class="eq" id="f34s"></div></div>
+      <h3>Del tema usamos</h3>
+      <div class="chips"><span class="chip">Matriz × vector</span><span class="chip">Cambio de ejes</span><span class="chip">Escala</span><span class="chip">Rotación</span><span class="chip">Composición</span><span class="chip">Inversa</span></div>
+    </div>
+    <div class="sim">
+      <div class="row">
+        <div class="card grow"><h3><i class="dot" style="background:var(--ax)"></i>Axial</h3><canvas class="cv sq" id="cv34a"></canvas></div>
+        <div class="card grow"><h3><i class="dot" style="background:var(--cor)"></i>Coronal</h3><canvas class="cv sq" id="cv34c"></canvas></div>
+        <div class="card grow"><h3><i class="dot" style="background:var(--sag)"></i>Sagital</h3><canvas class="cv sq" id="cv34s"></canvas></div>
+      </div>
+      <p class="hint">Haz clic en cualquier vista para mover los tres planos.</p>
+      <div class="row">
+        <div class="card grow">
+          <h3>Los tres planos en el volumen · arrastra para girar</h3>
+          <canvas class="cv sq" id="cv34w" style="max-width:min(100%,40vh)"></canvas>
+          <label class="chk"><input type="checkbox" id="sc34" checked> Aplicar escala S (Δz = 5 mm)</label>
+        </div>
+        <div class="card grow">
+          <h3>Matriz de rotación de la cámara</h3>
+          <div class="eq" id="r34"></div>
+          <div class="ro" id="ro34"></div>
+          <p class="hint">R = Rz(giro) · Rx(inclinación). Cada columna es un eje de la cámara: derecha, adelante y arriba.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 3.5 ============ -->
+  <section class="slide" id="t3-5" data-crumb="3.5">
+    <div class="notes">
+      <div class="kicker">3.5 · Coordenadas homogéneas</div>
+      <h2>¿Cómo se corta el cuerpo con un plano?</h2>
+      <div class="simple"><b class="l">En simple</b>La matriz sabe girar y estirar, pero no <b>mover</b>. Le pegamos un <b>1</b> al punto, como una mochila, y con eso también lo puede mover. Después, un <b>cuchillo mágico</b> (el plano) decide qué se ve.</div>
+      <h3>Paso a paso · toca cada paso</h3>
+      <ol class="steps">
+        <li data-act="range:vj35:60"><span><b>El 1 extra.</b> (x, y, z) → (x, y, z, 1): mover, girar y estirar caben en una matriz 4 × 4.</span></li>
+        <li data-act="range:vj35:90"><span><b>Ida y vuelta.</b> La matriz lleva de voxel a mm; su inversa, de mm a voxel.</span></li>
+        <li data-act="range:th35:85|range:ph35:40"><span><b>El cuchillo.</b> El plano son 4 números; la cuenta π·p dice si un punto está delante (+, se oculta) o detrás (−, se ve).</span></li>
+        <li data-act="range:th35:55|range:ph35:15|range:d35:70"><span><b>¿Toca el tumor?</b> Si el centro está más cerca del plano que su radio: alerta.</span></li>
+      </ol>
+      <div class="fx"><div class="t">voxel → mm (mueve j, i, k)</div><div class="eq" id="f35m"></div></div>
+      <div class="fx"><div class="t">mm → voxel (la inversa)</div><div class="eq" id="f35i"></div></div>
+      <div class="fx"><div class="t">El plano</div><div class="m">π·p = a·x + b·y + c·z − d</div><div class="live" id="f35p"></div><div class="live" id="f35t"></div></div>
+      <h3>Del tema usamos</h3>
+      <div class="chips"><span class="chip">Punto (x, y, z, 1)</span><span class="chip">Dirección (x, y, z, 0)</span><span class="chip">Matriz 4 × 4</span><span class="chip">Inversa</span><span class="chip">Plano como vector</span></div>
+    </div>
+    <div class="sim">
+      <div class="row">
+        <div class="card grow">
+          <h3>Volumen recortado por el plano · arrastra para girar</h3>
+          <canvas class="cv sq" id="cv35a"></canvas>
+          <label class="chk"><input type="checkbox" id="clip35" checked> Ocultar el lado + del plano</label>
+        </div>
+        <div class="card grow">
+          <h3>Corte oblicuo (lo que ve el médico)</h3>
+          <canvas class="cv sq" id="cv35b"></canvas>
+          <div id="alert35" class="hint"></div>
+        </div>
+      </div>
+      <div class="ctls">
+        <label class="ctl"><span>Inclinación θ</span><input type="range" id="th35" min="0" max="180" value="55"><output id="th35o"></output></label>
+        <label class="ctl"><span>Giro φ</span><input type="range" id="ph35" min="0" max="360" value="15"><output id="ph35o"></output></label>
+        <label class="ctl"><span>Distancia d</span><input type="range" id="d35" min="-150" max="150" value="40"><output id="d35o"></output></label>
+        <label class="ctl"><span>Voxel j</span><input type="range" id="vj35" min="0" max="127" value="90"><output id="vj35o"></output></label>
+        <label class="ctl"><span>Voxel i</span><input type="range" id="vi35" min="0" max="127" value="58"><output id="vi35o"></output></label>
+        <label class="ctl"><span>Voxel k</span><input type="range" id="vk35" min="0" max="63" value="39"><output id="vk35o"></output></label>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 3.6 ============ -->
+  <section class="slide" id="t3-6" data-crumb="3.6">
+    <div class="notes">
+      <div class="kicker">3.6 · Transformaciones afines</div>
+      <h2>¿Creció el tumor entre una tomografía y otra?</h2>
+      <div class="simple"><b class="l">En simple</b>Dos tomografías del mismo paciente, tomadas en meses distintos, <b>nunca calzan</b>: se acostó un poco movido, girado o más lejos. Antes de comparar hay que superponerlas, como alinear dos <b>transparencias</b>.</div>
+      <h3>Paso a paso · toca cada paso</h3>
+      <ol class="steps">
+        <li data-act="btn:mode36:0"><span><b>Superponer.</b> Fecha 1 en rojo, fecha 2 en celeste. Donde no coinciden se ven bordes de colores.</span></li>
+        <li data-act="range:tx36:12|range:ty36:-9"><span><b>Mover, girar y escalar.</b> Una transformación afín junta las tres cosas con 6 números, en una matriz 3 × 3.</span></li>
+        <li data-act="btn:auto36:0"><span><b>Buscar el mejor ajuste.</b> Se prueban valores hasta que la diferencia entre las dos imágenes sea mínima.</span></li>
+        <li data-act="btn:mode36:1"><span><b>Comparar.</b> Ya alineadas, se mide el tumor en las dos fechas.</span></li>
+      </ol>
+      <div class="fx"><div class="t">La matriz afín, en vivo</div><div class="eq" id="f36m"></div><div class="live" id="f36e"></div><div class="live" id="f36g"></div></div>
+      <h3>Del tema usamos</h3>
+      <div class="chips"><span class="chip">Traslación</span><span class="chip">Rotación</span><span class="chip">Escala</span><span class="chip">Matriz afín 3 × 3</span><span class="chip">Composición</span><span class="chip">Registro de imágenes</span></div>
+    </div>
+    <div class="sim">
+      <div class="row">
+        <div class="card grow">
+          <h3>Fecha 1 y fecha 2, una sobre otra</h3>
+          <canvas class="cv sq" id="cv36"></canvas>
+          <div class="btns" id="mode36">
+            <button class="btn on" data-v="mix">Superponer colores</button>
+            <button class="btn" data-v="chk">Tablero</button>
+            <button class="btn" data-v="a">Solo fecha 1</button>
+            <button class="btn" data-v="b">Solo fecha 2</button>
+          </div>
+        </div>
+        <div class="card grow">
+          <h3>¿Qué tan alineadas están?</h3>
+          <div class="meter"><i id="bar36"></i></div>
+          <div class="ro" id="ro36"></div>
+          <h3>El tumor en las dos fechas</h3>
+          <canvas class="cv" id="cv36t" style="aspect-ratio:2.2/1"></canvas>
+          <p class="hint" id="h36"></p>
+        </div>
+      </div>
+      <div class="ctls">
+        <label class="ctl"><span>Mover x</span><input type="range" id="tx36" min="-30" max="30" value="0"><output id="tx36o"></output></label>
+        <label class="ctl"><span>Mover y</span><input type="range" id="ty36" min="-30" max="30" value="0"><output id="ty36o"></output></label>
+        <label class="ctl"><span>Girar</span><input type="range" id="rot36" min="-20" max="20" value="0" step="0.5"><output id="rot36o"></output></label>
+        <label class="ctl"><span>Escalar</span><input type="range" id="sc36" min="85" max="115" value="100"><output id="sc36o"></output></label>
+      </div>
+      <div class="btns" id="auto36"><button class="btn">Alinear automáticamente</button><button class="btn">Volver al inicio</button></div>
+    </div>
+  </section>
+
+  <!-- ============ 3.7 ============ -->
+  <section class="slide" id="t3-7" data-crumb="3.7">
+    <div class="notes">
+      <div class="kicker">3.7 · Proyecciones</div>
+      <h2>¿Cómo se convierte el cubo de números en una imagen 3D?</h2>
+      <div class="simple"><b class="l">En simple</b>Imagina que miras por una <b>ventana</b> con un puntero láser: por cada puntito de la ventana disparas un rayo que atraviesa la gelatina, y vas <b>sumando los colores</b> que toca.</div>
+      <h3>Paso a paso · toca cada paso</h3>
+      <ol class="steps">
+        <li data-act="btn:pr37:1"><span><b>La cámara.</b> Un ojo y una pantalla. En perspectiva lo lejano se ve más chico: x′ = f · x / z.</span></li>
+        <li data-act="btn:pr37:0"><span><b>Proyección paralela.</b> Sin perspectiva, todos los rayos son paralelos. Sirve para medir sin deformar.</span></li>
+        <li data-act="ptr:cv37a:.5:.45:pointermove"><span><b>Un rayo por pixel.</b> Cada rayo entra al cubo y avanza en pasos de 2 mm.</span></li>
+        <li data-act="ptr:cv37a:.62:.5:pointermove"><span><b>Sumar colores.</b> En cada paso se lee el número, se le da color y transparencia, y se acumula. Si ya es opaco, el rayo se detiene.</span></li>
+      </ol>
+      <div class="fx"><div class="t">La cuenta de la proyección</div><div class="eq" id="f37m"></div><div class="live" id="f37x"></div></div>
+      <div class="fx"><div class="t">El rayo elegido</div><div class="live" id="f37r"></div></div>
+      <h3>Del tema usamos</h3>
+      <div class="chips"><span class="chip">Matriz de proyección</span><span class="chip">Perspectiva y paralela</span><span class="chip">División por w</span><span class="chip">Ray casting</span><span class="chip">Acumular colores</span></div>
+    </div>
+    <div class="sim">
+      <div class="row">
+        <div class="card grow">
+          <h3>Render por ray casting · arrastra para girar, mouse para elegir un rayo</h3>
+          <canvas class="cv sq" id="cv37a"></canvas>
+          <div class="btns" id="pr37"><button class="btn" data-v="o">Proyección paralela</button><button class="btn on" data-v="p">Perspectiva</button></div>
+          <label class="ctl"><span>Apertura del ojo</span><input type="range" id="fov37" min="20" max="90" value="50"><output id="fov37o"></output></label>
+        </div>
+        <div class="card grow">
+          <h3>Vista desde arriba: la cámara y sus rayos</h3>
+          <canvas class="cv" id="cv37d" style="aspect-ratio:1.7/1"></canvas>
+          <h3>Lo que recorre el rayo elegido</h3>
+          <canvas class="cv" id="cv37p" style="aspect-ratio:2.3/1"></canvas>
+          <div class="legend"><span><i class="dot" style="background:var(--cyan)"></i>Valor HU en cada paso</span><span><i class="dot" style="background:var(--accent)"></i>Opacidad acumulada</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 3.8 ============ -->
+  <section class="slide" id="t3-8" data-crumb="3.8">
+    <div class="notes">
+      <div class="kicker">3.8 · Orientación 3D</div>
+      <h2>¿Cómo sigue el sistema la cabeza del médico sin trabarse?</h2>
+      <div class="simple"><b class="l">En simple</b>Imagina un <b>giroscopio</b> con tres anillos. Si dos anillos quedan alineados, pierdes un movimiento: eso es el <b>bloqueo de cardán</b> (gimbal lock). Los <b>cuaterniones</b> no tienen ese problema.</div>
+      <h3>Paso a paso · toca cada paso</h3>
+      <ol class="steps">
+        <li data-act="range:pi38:20"><span><b>Tres ángulos.</b> Giro, inclinación y rotación (Euler). Son fáciles de entender.</span></li>
+        <li data-act="range:pi38:90"><span><b>El bloqueo.</b> Con 90° de inclinación, el anillo rojo y el azul quedan en el mismo eje: se pierde un movimiento.</span></li>
+        <li data-act="range:pi38:20"><span><b>Cuaternión.</b> 4 números (w, x, y, z) que guardan un eje y un ángulo. No se traba nunca.</span></li>
+        <li data-act="btn:play38:0"><span><b>SLERP.</b> Para ir de una orientación a otra, se toma el camino más corto sobre la esfera: giro suave, sin mareo.</span></li>
+      </ol>
+      <div class="fx"><div class="t">El cuaternión del casco, en vivo</div><div class="m">q = (cos θ/2, sen θ/2 · eje)   p′ = q · p · q*</div><div class="live" id="f38q"></div><div class="live" id="f38e"></div></div>
+      <div class="fx"><div class="t">La interpolación</div><div class="m">q(t) = slerp(q₁, q₂, t)</div><div class="live" id="f38s"></div></div>
+      <h3>Del tema usamos</h3>
+      <div class="chips"><span class="chip">Ángulos de Euler</span><span class="chip">Gimbal lock</span><span class="chip">Cuaternión</span><span class="chip">Producto de cuaterniones</span><span class="chip">SLERP</span></div>
+    </div>
+    <div class="sim">
+      <div class="row">
+        <div class="card grow">
+          <h3>Tres anillos (ángulos de Euler)</h3>
+          <canvas class="cv sq" id="cv38a"></canvas>
+          <div id="lock38" class="hint"></div>
+        </div>
+        <div class="card grow">
+          <h3>Pasar de una orientación a otra</h3>
+          <canvas class="cv sq" id="cv38b"></canvas>
+          <div class="legend"><span><i class="dot" style="background:var(--accent)"></i>Con ángulos: camino largo y torcido</span><span><i class="dot" style="background:var(--cyan)"></i>Con cuaternión (SLERP): camino corto</span></div>
+        </div>
+      </div>
+      <div class="ctls">
+        <label class="ctl"><span>Giro</span><input type="range" id="yaw38" min="-180" max="180" value="30"><output id="yaw38o"></output></label>
+        <label class="ctl"><span>Inclinación</span><input type="range" id="pi38" min="-90" max="90" value="20"><output id="pi38o"></output></label>
+        <label class="ctl"><span>Rotación</span><input type="range" id="ro38" min="-180" max="180" value="0"><output id="ro38o"></output></label>
+        <label class="ctl"><span>Avance t</span><input type="range" id="t38" min="0" max="100" value="0"><output id="t38o"></output></label>
+      </div>
+      <div class="btns" id="play38"><button class="btn">▶ Animar el giro</button></div>
+    </div>
+  </section>
+
+  <!-- ============ 3.9 ============ -->
+  <section class="slide" id="t3-9" data-crumb="3.9">
+    <div class="notes">
+      <div class="kicker">3.9 · Generalización de transformaciones</div>
+      <h2>¿Y si el paciente respira y todo se mueve?</h2>
+      <div class="simple"><b class="l">En simple</b>Al respirar, los pulmones se inflan como un <b>globo</b>: la parte de abajo se mueve mucho y la de arriba casi nada. No hay un solo movimiento para todo: cada punto tiene <b>su propia flecha</b>.</div>
+      <h3>Paso a paso · toca cada paso</h3>
+      <ol class="steps">
+        <li data-act="btn:play39:0"><span><b>4D-CT.</b> Se toma la tomografía en varias fases de la respiración: un cubo de números por cada momento.</span></li>
+        <li data-act="check:grid39:1"><span><b>Campo de deformación.</b> Cada punto p tiene su flecha d(p). Mira cómo se dobla la malla.</span></li>
+        <li data-act="check:comp39:1"><span><b>Warping.</b> p′ = p + d(p). Aplicando las flechas al revés, cada fase vuelve a la de referencia.</span></li>
+        <li data-act="check:comp39:0"><span><b>Resultado.</b> El tumor queda quieto en la imagen y la aguja se planea sobre un blanco fijo.</span></li>
+      </ol>
+      <div class="fx"><div class="t">La cuenta en el tumor</div><div class="m">p′ = p + d(p, t)</div><div class="live" id="f39a"></div><div class="live" id="f39b"></div></div>
+      <h3>Del tema usamos</h3>
+      <div class="chips"><span class="chip">Transformación no rígida</span><span class="chip">Campo de vectores</span><span class="chip">Warping</span><span class="chip">Interpolación</span><span class="chip">Tiempo (4D)</span></div>
+    </div>
+    <div class="sim">
+      <div class="row">
+        <div class="card grow">
+          <h3>Corte coronal mientras respira</h3>
+          <canvas class="cv sq" id="cv39"></canvas>
+          <div class="btns" id="play39"><button class="btn">▶ Respirar</button></div>
+          <label class="chk"><input type="checkbox" id="grid39" checked> Mostrar la malla y las flechas d(p)</label>
+          <label class="chk"><input type="checkbox" id="comp39"> Compensar (warping al revés)</label>
+        </div>
+        <div class="card grow">
+          <h3>¿Cuánto se mueve el tumor?</h3>
+          <canvas class="cv" id="cv39p" style="aspect-ratio:1.8/1"></canvas>
+          <div class="legend"><span><i class="dot" style="background:var(--accent)"></i>Sin compensar</span><span><i class="dot" style="background:var(--sag)"></i>Compensado</span></div>
+          <div class="ro" id="ro39"></div>
+        </div>
+      </div>
+      <label class="ctl"><span>Fase de la respiración</span><input type="range" id="fase39" min="0" max="100" value="0"><output id="fase39o"></output></label>
+    </div>
+  </section>
+
+  <!-- ============ 3.10 ============ -->
+  <section class="slide" id="t3-10" data-crumb="3.10">
+    <div class="notes">
+      <div class="kicker">3.10 · Window → Viewport</div>
+      <h2>¿Cómo caben varias vistas en una pantalla, o en dos ojos?</h2>
+      <div class="simple"><b class="l">En simple</b>La <b>window</b> es el pedazo del cuerpo que quieres ver (en mm). El <b>viewport</b> es el rectángulo de la pantalla donde lo dibujas (en pixeles). Es como meter una foto en un <b>marco</b>: se estira y se mueve para que entre.</div>
+      <h3>Paso a paso · toca cada paso</h3>
+      <ol class="steps">
+        <li data-act="btn:lay310:0"><span><b>Varias vistas.</b> La pantalla se divide en viewports: axial, coronal, sagital y 3D.</span></li>
+        <li data-act="range:zm310:120"><span><b>Zoom = window más chica.</b> Menos milímetros en el mismo marco: todo se ve más grande.</span></li>
+        <li data-act="ptr:cv310:.3:.3:pointermove"><span><b>La cuenta.</b> u = Vx + (x − Wx) · Vw / Ww: escalar y mover.</span></li>
+        <li data-act="btn:lay310:2"><span><b>En VR, dos ojos.</b> Cada ojo es un viewport con la cámara un poquito corrida: así se ve en 3D.</span></li>
+      </ol>
+      <div class="fx"><div class="t">La cuenta window → viewport</div><div class="m">u = Vx + (x − Wx) · Vw / Ww</div><div class="live" id="f310"></div></div>
+      <h3>Del tema usamos</h3>
+      <div class="chips"><span class="chip">Window (mundo)</span><span class="chip">Viewport (pantalla)</span><span class="chip">Escala Vw / Ww</span><span class="chip">Traslación</span><span class="chip">Relación de aspecto</span><span class="chip">Estéreo</span></div>
+    </div>
+    <div class="sim">
+      <div class="card">
+        <h3>La pantalla dividida en viewports · arrastra para mover la window, clic para marcar un punto</h3>
+        <canvas class="cv" id="cv310" style="aspect-ratio:16/10;max-width:min(100%,104vh);margin-inline:auto"></canvas>
+        <div class="btns" id="lay310"><button class="btn on" data-v="4">2 × 2</button><button class="btn" data-v="13">1 grande + 3</button><button class="btn" data-v="vr">VR: dos ojos</button></div>
+      </div>
+      <label class="ctl"><span>Ancho de la window</span><input type="range" id="zm310" min="60" max="330" value="320"><output id="zm310o"></output></label>
+      <div class="card"><div class="ro" id="ro310"></div></div>
+    </div>
+  </section>
+
+  <!-- ============ 3.11 ============ -->
+  <section class="slide" id="t3-11" data-crumb="3.11">
+    <div class="notes">
+      <div class="kicker">3.11 · Verificaciones geométricas</div>
+      <h2>¿Qué está dentro, qué se toca y qué se ve?</h2>
+      <div class="simple"><b class="l">En simple</b>Son preguntas de <b>sí o no</b> que el sistema se hace miles de veces por segundo: ¿este punto está dentro de la caja? ¿este rayo la atraviesa? ¿la cámara ve este bloque?</div>
+      <h3>Paso a paso · toca cada paso</h3>
+      <ol class="steps">
+        <li data-act="btn:tab311:0"><span><b>Punto dentro de una caja.</b> Se compara con los mínimos y máximos: xmin ≤ x ≤ xmax, y lo mismo en y, z.</span></li>
+        <li data-act="btn:tab311:1"><span><b>Rayo contra caja.</b> Se calcula dónde el rayo cruza cada par de paredes. Si los tramos se solapan, entra.</span></li>
+        <li data-act="btn:tab311:2"><span><b>Frustum culling.</b> La cámara ve una pirámide; los bloques fuera de ella no se procesan.</span></li>
+        <li><span><b>Ya los usamos:</b> distancia aguja–estructura (3.3) y plano–tumor (3.5) también son verificaciones geométricas.</span></li>
+      </ol>
+      <div class="fx"><div class="t">La prueba, en vivo</div><div class="live" id="f311"></div></div>
+      <h3>Del tema usamos</h3>
+      <div class="chips"><span class="chip">Punto en caja (ROI)</span><span class="chip">Rayo contra caja</span><span class="chip">Intersección</span><span class="chip">Frustum (planos)</span><span class="chip">Culling</span></div>
+    </div>
+    <div class="sim">
+      <div class="row">
+        <div class="card grow">
+          <h3 id="t311h">Pasa el mouse sobre la imagen</h3>
+          <canvas class="cv sq" id="cv311"></canvas>
+          <div class="btns" id="tab311"><button class="btn on" data-v="roi">Punto en caja</button><button class="btn" data-v="ray">Rayo contra caja</button><button class="btn" data-v="fru">Frustum culling</button></div>
+        </div>
+        <div class="card grow">
+          <h3>La prueba, en números</h3>
+          <div class="ro" id="ro311"></div>
+          <p class="hint" id="h311"></p>
+          <div class="ctls" id="fc311" hidden>
+            <label class="ctl"><span>Hacia dónde mira</span><input type="range" id="ang311" min="0" max="360" value="0"><output id="ang311o"></output></label>
+            <label class="ctl"><span>Apertura</span><input type="range" id="fov311" min="20" max="120" value="50"><output id="fov311o"></output></label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ RESUMEN ============ -->
+  <section class="slide" id="resumen" data-crumb="Resumen">
+    <div class="notes">
+      <div class="kicker">Cierre</div>
+      <h2>Once herramientas, un solo sistema</h2>
+      <div class="simple"><b class="l">En simple</b>Para la computadora el cuerpo es un <b>cubo de números</b>. La matemática decide qué ver, dónde está cada cosa, cómo se mueve y si algo es peligroso.</div>
+      <div class="flow"><b>números</b><i>→</i><b>mm</b><i>→</i><b>bordes</b><i>→</i><b>vistas</b><i>→</i><b>4 × 4</b><i>→</i><b>alinear</b><i>→</i><b>proyectar</b><i>→</i><b>orientar</b><i>→</i><b>respirar</b><i>→</i><b>pantalla</b><i>→</i><b>verificar</b></div>
+      <p class="lead" style="margin-top:auto">Gracias. ¿Preguntas?</p>
+    </div>
+    <div class="sim">
+      <table class="sum">
+        <thead><tr><th>Tema</th><th>La pregunta</th><th>La herramienta</th></tr></thead>
+        <tbody>
+          <tr><td>3.1</td><td>¿Cómo encuentra el tumor?</td><td>Matriz, tensor, ventaneo y umbral</td></tr>
+          <tr><td>3.2</td><td>¿Dónde está cada punto?</td><td>Origen + índice × tamaño, en mm</td></tr>
+          <tr><td>3.3</td><td>¿Dónde termina un órgano? ¿La aguja choca?</td><td>Gradiente, producto punto, distancia</td></tr>
+          <tr><td>3.4</td><td>¿Cómo se ve de frente y de costado?</td><td>Matrices de vista, escala y rotación</td></tr>
+          <tr><td>3.5</td><td>¿Cómo se corta con un plano?</td><td>Matriz 4 × 4 y plano como vector</td></tr>
+          <tr><td>3.6</td><td>¿Creció el tumor?</td><td>Transformación afín (alinear dos fechas)</td></tr>
+          <tr><td>3.7</td><td>¿Cómo se dibuja el 3D?</td><td>Proyección y ray casting</td></tr>
+          <tr><td>3.8</td><td>¿Cómo sigue la cabeza sin trabarse?</td><td>Cuaterniones y SLERP</td></tr>
+          <tr><td>3.9</td><td>¿Y si el paciente respira?</td><td>Campo de deformación (warping)</td></tr>
+          <tr><td>3.10</td><td>¿Cómo caben varias vistas?</td><td>Window → viewport</td></tr>
+          <tr><td>3.11</td><td>¿Qué está dentro, qué se toca, qué se ve?</td><td>Punto en caja, rayo–caja, frustum culling</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  </main>
+
+  <footer class="foot">
+    <button class="nav" id="prev" aria-label="Lámina anterior">←</button>
+    <button class="nav" id="next" aria-label="Lámina siguiente">→</button>
+    <span id="count"></span>
+    <span class="sp"></span>
+    <button class="nav" id="tourBtn">Ensayo guiado ▶</button>
+    <button class="nav" id="fs">Pantalla completa</button>
+  </footer>
+</div>
+
+<script>
+"use strict";
+const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const nf=(v,d=1)=>{const r=Number(v).toFixed(d);return (Number(r)===0?(0).toFixed(d):r).replace('-','−');};
+// colores de los simuladores: se mantienen oscuros, como la pantalla de un visor médico
+const CSS={'--bg':'#0a0f14','--panel':'#0f171f','--panel-2':'#15202b','--line':'#22303e','--fg':'#e8eef4','--muted':'#93a4b6','--accent':'#f2b84b','--cyan':'#62d2d8','--ax':'#ff6b6b','--cor':'#5ea1ff','--sag':'#52d888'};
+const MONO='JetBrains Mono, Consolas, monospace';
+
+/* ================= VOLUMEN (fantoma sintético) ================= */
+const W=128,H=128,D=64, DX=2.5,DY=2.5,DZ=5, OX=-160,OY=-160,OZ=-160;
+const vol=new Int16Array(W*H*D);
+const TUMOR={x:66,y:-15,z:35,r:16};
+const IDX=(k,i,j)=>(k*H+i)*W+j;
+function hash(n){n=(n^61)^(n>>>16);n=(n+(n<<3))|0;n=n^(n>>>4);n=Math.imul(n,0x27d4eb2d);n=n^(n>>>15);return (n>>>0)/4294967296;}
+function phantom(x,y,z){
+  const e=(x/140)**2+(y/105)**2;
+  if(e>1) return -1000;
+  let v=40;
+  if(e>0.93) v=25; else if(e>0.84) v=-100;
+  if(e>0.75&&e<0.8&&Math.abs(x)>22&&((z+1000)%30)<7) v=650;
+  const lz=(z-10)/125;
+  const l1=((x-60)/46)**2+((y+5)/58)**2+lz*lz, l2=((x+60)/46)**2+((y+5)/58)**2+lz*lz;
+  if(l1<1||l2<1) v=-820;
+  if(((x+10)/46)**2+((y+30)/40)**2+((z+45)/55)**2<1) v=45;
+  if((x-24)**2+(y-40)**2<169) v=180;
+  if(x*x+(y-62)**2<400) v=(((z+1000)%32)<6)?20:700;
+  if(x*x+(y-88)**2<81) v=20; else if((x/7)**2+((y-100)/14)**2<1) v=700;
+  if(x*x+(y+96)**2<81) v=600;
+  if((x-TUMOR.x)**2+(y-TUMOR.y)**2+(z-TUMOR.z)**2<TUMOR.r**2) v=95;
+  return v;
+}
+for(let k=0;k<D;k++)for(let i=0;i<H;i++)for(let j=0;j<W;j++){
+  const id=IDX(k,i,j); let v=phantom(OX+j*DX,OY+i*DY,OZ+k*DZ);
+  v+= (hash(id)-0.5)*(v<-900?8:24);
+  vol[id]=Math.round(v);
+}
+const V=(k,i,j)=>vol[IDX(clamp(k,0,D-1),clamp(i,0,H-1),clamp(j,0,W-1))];
+function sampleMM(x,y,z){
+  const fj=(x-OX)/DX, fi=(y-OY)/DY, fk=(z-OZ)/DZ;
+  if(fj<0||fi<0||fk<0||fj>W-1||fi>H-1||fk>D-1) return -1000;
+  const j0=Math.floor(fj),i0=Math.floor(fi),k0=Math.floor(fk);
+  const j1=Math.min(j0+1,W-1),i1=Math.min(i0+1,H-1),k1=Math.min(k0+1,D-1);
+  const tj=fj-j0,ti=fi-i0,tk=fk-k0;
+  const a=vol[IDX(k0,i0,j0)]*(1-tj)+vol[IDX(k0,i0,j1)]*tj, b=vol[IDX(k0,i1,j0)]*(1-tj)+vol[IDX(k0,i1,j1)]*tj;
+  const c=vol[IDX(k1,i0,j0)]*(1-tj)+vol[IDX(k1,i0,j1)]*tj, d=vol[IDX(k1,i1,j0)]*(1-tj)+vol[IDX(k1,i1,j1)]*tj;
+  return ((a*(1-ti)+b*ti)*(1-tk)+(c*(1-ti)+d*ti)*tk);
+}
+const gray=(h,wl,ww)=>clamp((h-(wl-ww/2))/ww*255,0,255);
+function tissue(h){if(h<-900)return'Aire';if(h<-500)return'Pulmón';if(h<-50)return'Grasa';if(h<75)return'Tejido blando';if(h<130)return'Tumor (simulado)';if(h<250)return'Vaso con contraste';return'Hueso';}
+function grad(k,i,j){return[(V(k,i,j+1)-V(k,i,j-1))/(2*DX),(V(k,i+1,j)-V(k,i-1,j))/(2*DY),(V(k+1,i,j)-V(k-1,i,j))/(2*DZ)];}
+
+/* ================= utilidades de dibujo ================= */
+function fit(cv){
+  const dpr=Math.min(2,window.devicePixelRatio||1), w=cv.clientWidth, h=cv.clientHeight;
+  const pw=Math.max(10,Math.round(w*dpr)), ph=Math.max(10,Math.round(h*dpr));
+  if(cv.width!==pw||cv.height!==ph){cv.width=pw;cv.height=ph;}
+  const ctx=cv.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0); return {ctx,w,h,dpr};
+}
+const offs={};
+function getOff(key,w,h){let o=offs[key];if(!o||o.c.width!==w||o.c.height!==h){const c=document.createElement('canvas');c.width=w;c.height=h;o=offs[key]={c,ctx:c.getContext('2d'),img:null};}return o;}
+// kind: 'ax' (idx = k), 'cor' (idx = i), 'sag' (idx = j). Filas de cor/sag: cabeza arriba.
+function sliceImg(kind,idx,fn){
+  let w,h; if(kind==='ax'){w=W;h=H}else if(kind==='cor'){w=W;h=D}else{w=H;h=D}
+  const o=getOff('s'+kind,w,h); const id=o.ctx.createImageData(w,h), d=id.data;
+  for(let r=0;r<h;r++)for(let c=0;c<w;c++){
+    const hu=kind==='ax'?vol[IDX(idx,r,c)]:kind==='cor'?vol[IDX(D-1-r,idx,c)]:vol[IDX(D-1-r,c,idx)];
+    const p=(r*w+c)*4, g=fn(hu,r,c);
+    if(Array.isArray(g)){d[p]=g[0];d[p+1]=g[1];d[p+2]=g[2];d[p+3]=g[3]??255;} else {d[p]=d[p+1]=d[p+2]=g;d[p+3]=255;}
+  }
+  o.ctx.putImageData(id,0,0); return o.c;
+}
+function label(ctx,t,x,y,col,align='left'){ctx.font='600 12px '+MONO;ctx.textAlign=align;ctx.lineWidth=3;ctx.strokeStyle='rgba(0,0,0,.8)';ctx.strokeText(t,x,y);ctx.fillStyle=col;ctx.fillText(t,x,y);}
+function bindRange(id,fn,fmt=v=>v){const el=$('#'+id),out=$('#'+id+'o');const up=()=>{const v=Number(el.value);if(out)out.textContent=fmt(v);fn(v);};el.addEventListener('input',up);if(out)out.textContent=fmt(Number(el.value));return el;}
+function bindBtns(id,fn){const box=$('#'+id);box.addEventListener('click',e=>{const b=e.target.closest('.btn');if(!b)return;$$('.btn',box).forEach(x=>x.classList.toggle('on',x===b));fn(b.dataset);});}
+function matHTML(rows,hl){const c=rows[0].length;return `<span class="mat${hl?' hl':''}" style="--c:${c}">${rows.flat().map(v=>`<span>${typeof v==='number'?nf(v,Number.isInteger(v)?0:2):v}</span>`).join('')}</span>`;}
+const norm3=v=>{const l=Math.hypot(v[0],v[1],v[2])||1;return[v[0]/l,v[1]/l,v[2]/l];};
+const dot3=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+const cross3=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+function pos(e,cv){const r=cv.getBoundingClientRect();return[(e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height];}
+
+/* ================= cámara y ray casting ================= */
+// R = Rz(giro) · Rx(inclinación). Columnas: derecha, adelante, arriba.
+function camBasis(yaw,pitch){
+  const cy=Math.cos(yaw),sy=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch);
+  const R=[[cy,-sy*cp,sy*sp],[sy,cy*cp,-cy*sp],[0,sp,cp]];
+  const col=c=>[R[0][c],R[1][c],R[2][c]];
+  return {R,right:col(0),fwd:col(1),up:col(2)};
+}
+const BX0=OX,BX1=OX+(W-1)*DX,BY0=OY,BY1=OY+(H-1)*DY,BZ0=OZ,BZ1=OZ+(D-1)*DZ;
+const BOX=[]; for(let b=0;b<8;b++) BOX.push([b&1?BX1:BX0,b&2?BY1:BY0,b&4?BZ1:BZ0]);
+const EDGES=[]; for(let a=0;a<8;a++)for(let b=a+1;b<8;b++){const x=a^b;if(x===1||x===2||x===4)EDGES.push([a,b]);}
+function raycast(N,st){
+  const o=getOff('rc'+N,N,N); if(!o.img) o.img=o.ctx.createImageData(N,N); const px=o.img.data;
+  const cam=camBasis(st.yaw,st.pitch), R=cam.right,U=cam.up,F=cam.fwd, S=st.span||190;
+  const L=st.L||[-F[0],-F[1],-F[2]], Hv=norm3([L[0]-F[0],L[1]-F[1],L[2]-F[2]]);
+  const iso=st.mode==='iso', step=iso?1.5:2.0, isoV=st.iso??300, lit=st.lighting!==false;
+  const cl=st.clip&&st.clip.on, ca=cl?st.clip.n[0]:0, cb=cl?st.clip.n[1]:0, cc=cl?st.clip.n[2]:0, cd=cl?st.clip.d:0;
+  let nb=null; if(st.wantNormals){ if(!st.normals||st.normals.length!==N*N*3) st.normals=new Float32Array(N*N*3); nb=st.normals; st.normalsN=N; }
+  const bg0=.035,bg1=.055,bg2=.075;
+  const persp=!!st.persp, tf2=Math.tan((st.fov||50)*Math.PI/360), PD=st.pd||560;
+  for(let py=0;py<N;py++){
+    const vv=1-(py+.5)/N*2, v=vv*S;
+    for(let qx=0;qx<N;qx++){
+      const uu=(qx+.5)/N*2-1, u=uu*S;
+      let ox,oy,oz,dx,dy,dz;
+      if(persp){ox=-F[0]*PD;oy=-F[1]*PD;oz=-F[2]*PD;const ax=F[0]+(R[0]*uu+U[0]*vv)*tf2,ay=F[1]+(R[1]*uu+U[1]*vv)*tf2,az=F[2]+(R[2]*uu+U[2]*vv)*tf2,l=Math.hypot(ax,ay,az);dx=ax/l;dy=ay/l;dz=az/l;}
+      else{ox=R[0]*u+U[0]*v-F[0]*500;oy=R[1]*u+U[1]*v-F[1]*500;oz=R[2]*u+U[2]*v-F[2]*500;dx=F[0];dy=F[1];dz=F[2];}
+      let tn=-1e9,tf=1e9,miss=false,t1,t2,q;
+      if(Math.abs(dx)<1e-9){if(ox<BX0||ox>BX1)miss=true;}else{t1=(BX0-ox)/dx;t2=(BX1-ox)/dx;if(t1>t2){q=t1;t1=t2;t2=q;}if(t1>tn)tn=t1;if(t2<tf)tf=t2;}
+      if(Math.abs(dy)<1e-9){if(oy<BY0||oy>BY1)miss=true;}else{t1=(BY0-oy)/dy;t2=(BY1-oy)/dy;if(t1>t2){q=t1;t1=t2;t2=q;}if(t1>tn)tn=t1;if(t2<tf)tf=t2;}
+      if(Math.abs(dz)<1e-9){if(oz<BZ0||oz>BZ1)miss=true;}else{t1=(BZ0-oz)/dz;t2=(BZ1-oz)/dz;if(t1>t2){q=t1;t1=t2;t2=q;}if(t1>tn)tn=t1;if(t2<tf)tf=t2;}
+      let r=0,g=0,b=0,a=0; const pi=(py*N+qx);
+      if(nb){nb[pi*3]=0;nb[pi*3+1]=0;nb[pi*3+2]=0;}
+      if(!miss&&tn<tf){
+        let wasClipped=false;
+        for(let t=tn;t<=tf;t+=step){
+          const x=ox+dx*t,y=oy+dy*t,z=oz+dz*t;
+          if(cl&&ca*x+cb*y+cc*z-cd>0){wasClipped=true;continue;}
+          const j=((x-OX)/DX+.5)|0,i=((y-OY)/DY+.5)|0,k=((z-OZ)/DZ+.5)|0;
+          const h=vol[(k*H+i)*W+j];
+          if(iso){
+            if(h<isoV){wasClipped=false;continue;}
+            let nx,ny,nz;
+            if(wasClipped){nx=ca;ny=cb;nz=cc;}
+            else{const gx=V(k,i,j+1)-V(k,i,j-1),gy=V(k,i+1,j)-V(k,i-1,j),gz=(V(k+1,i,j)-V(k-1,i,j))*(DX/DZ);const l=Math.hypot(gx,gy,gz)||1;nx=-gx/l;ny=-gy/l;nz=-gz/l;}
+            if(nx*dx+ny*dy+nz*dz>0){nx=-nx;ny=-ny;nz=-nz;}
+            const c0=h>=250?.95:.93,c1=h>=250?.92:.70,c2=h>=250?.86:.62;
+            if(lit){const df=Math.max(0,nx*L[0]+ny*L[1]+nz*L[2]);const sp=Math.pow(Math.max(0,nx*Hv[0]+ny*Hv[1]+nz*Hv[2]),30)*.3;const sh=.16+.84*df;r=c0*sh+sp;g=c1*sh+sp;b=c2*sh+sp;}
+            else{r=c0*.75;g=c1*.75;b=c2*.75;}
+            a=1; if(nb){nb[pi*3]=nx;nb[pi*3+1]=ny;nb[pi*3+2]=nz;}
+            break;
+          }else{
+            wasClipped=false;
+            if(h<-200) continue;
+            let c0,c1,c2,al;
+            if(h<75){ if(h<-50){c0=.9;c1=.75;c2=.5;al=.004;} else {c0=.85;c1=.42;c2=.38;al=.011;} }
+            else if(h<130){c0=1;c1=.72;c2=.2;al=.5;}
+            else if(h<240){c0=.9;c1=.15;c2=.18;al=.32;}
+            else {c0=.96;c1=.93;c2=.86;al=.55;}
+            if(al>.25){
+              const gx=V(k,i,j+1)-V(k,i,j-1),gy=V(k,i+1,j)-V(k,i-1,j),gz=(V(k+1,i,j)-V(k-1,i,j))*(DX/DZ);const l=Math.hypot(gx,gy,gz)||1;
+              const sh=.35+.65*Math.abs((gx*L[0]+gy*L[1]+gz*L[2])/l); c0*=sh;c1*=sh;c2*=sh;
+            }
+            const w=(1-a)*al; r+=w*c0; g+=w*c1; b+=w*c2; a+=w;
+            if(a>.97) break;
+          }
+        }
+      }
+      const p4=pi*4;
+      px[p4]=clamp((r+(1-a)*bg0)*255,0,255); px[p4+1]=clamp((g+(1-a)*bg1)*255,0,255); px[p4+2]=clamp((b+(1-a)*bg2)*255,0,255); px[p4+3]=255;
+    }
+  }
+  o.ctx.putImageData(o.img,0,0); return o.c;
+}
+function projector(cam,S,w,h){return p=>[((p[0]*cam.right[0]+p[1]*cam.right[1]+p[2]*cam.right[2])/S+1)/2*w,(1-(p[0]*cam.up[0]+p[1]*cam.up[1]+p[2]*cam.up[2])/S)/2*h];}
+function projFor(st,w,h){
+  const cam=camBasis(st.yaw,st.pitch),R=cam.right,U=cam.up,F=cam.fwd;
+  if(st.persp){const tf2=Math.tan((st.fov||50)*Math.PI/360),PD=st.pd||560;
+    return p=>{const rx=p[0]+F[0]*PD,ry=p[1]+F[1]*PD,rz=p[2]+F[2]*PD,z=Math.max(1,rx*F[0]+ry*F[1]+rz*F[2]);
+      return[((rx*R[0]+ry*R[1]+rz*R[2])/(z*tf2)+1)/2*w,(1-(rx*U[0]+ry*U[1]+rz*U[2])/(z*tf2))/2*h];};}
+  return projector(cam,st.span||190,w,h);
+}
+function drawRender(cv,st,overlay){
+  const {ctx,w,h}=fit(cv); const N=st.fast?84:(st.N||150);
+  ctx.imageSmoothingEnabled=true; ctx.drawImage(raycast(N,st),0,0,w,h);
+  const cam=camBasis(st.yaw,st.pitch), P=projFor(st,w,h);
+  if(overlay) overlay(ctx,w,h,P,cam);
+}
+// color y opacidad de cada tejido (la misma regla que usa el render)
+function tfColor(h){
+  if(h<-200) return null;
+  if(h<75) return h<-50?[.9,.75,.5,.004]:[.85,.42,.38,.011];
+  if(h<130) return [1,.72,.2,.5];
+  if(h<240) return [.9,.15,.18,.32];
+  return [.96,.93,.86,.55];
+}
+// recorrido de un solo rayo (para mostrar paso a paso lo que hace el ray casting)
+function rayInfo(st,uu,vv){
+  const cam=camBasis(st.yaw,st.pitch),R=cam.right,U=cam.up,F=cam.fwd,S=st.span||190;
+  let ox,oy,oz,dx,dy,dz;
+  if(st.persp){const tf2=Math.tan((st.fov||50)*Math.PI/360),PD=st.pd||560;ox=-F[0]*PD;oy=-F[1]*PD;oz=-F[2]*PD;const ax=F[0]+(R[0]*uu+U[0]*vv)*tf2,ay=F[1]+(R[1]*uu+U[1]*vv)*tf2,az=F[2]+(R[2]*uu+U[2]*vv)*tf2,l=Math.hypot(ax,ay,az);dx=ax/l;dy=ay/l;dz=az/l;}
+  else{ox=(R[0]*uu+U[0]*vv)*S-F[0]*500;oy=(R[1]*uu+U[1]*vv)*S-F[1]*500;oz=(R[2]*uu+U[2]*vv)*S-F[2]*500;dx=F[0];dy=F[1];dz=F[2];}
+  let tn=-1e9,tf=1e9;
+  for(const [o,d,b0,b1] of [[ox,dx,BX0,BX1],[oy,dy,BY0,BY1],[oz,dz,BZ0,BZ1]]){
+    if(Math.abs(d)<1e-9){if(o<b0||o>b1) return {miss:true};}
+    else{let t1=(b0-o)/d,t2=(b1-o)/d;if(t1>t2){const q=t1;t1=t2;t2=q;}if(t1>tn)tn=t1;if(t2<tf)tf=t2;}
+  }
+  if(!(tn<tf)) return {miss:true};
+  const out=[]; let a=0, stop=null;
+  for(let t=tn;t<=tf;t+=2){
+    const x=ox+dx*t,y=oy+dy*t,z=oz+dz*t, j=((x-OX)/DX+.5)|0,i=((y-OY)/DY+.5)|0,k=((z-OZ)/DZ+.5)|0, h=vol[(k*H+i)*W+j], c=tfColor(h);
+    if(c){a+=(1-a)*c[3];}
+    out.push({s:t-tn,h,a,c});
+    if(a>.97){stop=t-tn;break;}
+  }
+  return {tn,tf,len:tf-tn,samples:out,stop};
+}
+function drawBox(ctx,P,col='rgba(147,164,182,.55)'){ctx.strokeStyle=col;ctx.lineWidth=1;ctx.beginPath();for(const[a,b]of EDGES){const p=P(BOX[a]),q=P(BOX[b]);ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);}ctx.stroke();}
+function dragRotate(cv,st,redrawFn,hoverFn){
+  let on=false,lx=0,ly=0;
+  cv.addEventListener('pointerdown',e=>{on=true;lx=e.clientX;ly=e.clientY;cv.setPointerCapture(e.pointerId);});
+  cv.addEventListener('pointermove',e=>{
+    if(on){st.yaw+=(e.clientX-lx)*.01;st.pitch=clamp(st.pitch-(e.clientY-ly)*.01,-1.45,1.45);lx=e.clientX;ly=e.clientY;st.fast=true;redrawFn();}
+    else if(hoverFn) hoverFn(e);
+  });
+  const end=()=>{if(on){on=false;st.fast=false;redrawFn();}};
+  cv.addEventListener('pointerup',end);cv.addEventListener('pointercancel',end);
+}
+function planePoly(n,d){
+  const pts=[];
+  for(const[a,b]of EDGES){const p=BOX[a],q=BOX[b];const s1=dot3(n,p)-d,s2=dot3(n,q)-d;if((s1<=0&&s2>0)||(s1>0&&s2<=0)){const t=s1/(s1-s2);pts.push([p[0]+(q[0]-p[0])*t,p[1]+(q[1]-p[1])*t,p[2]+(q[2]-p[2])*t]);}}
+  if(pts.length<3) return pts;
+  const c=pts.reduce((s,p)=>[s[0]+p[0]/pts.length,s[1]+p[1]/pts.length,s[2]+p[2]/pts.length],[0,0,0]);
+  const {u,v}=planeBasis(n);
+  pts.sort((A,B)=>Math.atan2(dot3([A[0]-c[0],A[1]-c[1],A[2]-c[2]],v),dot3([A[0]-c[0],A[1]-c[1],A[2]-c[2]],u))-Math.atan2(dot3([B[0]-c[0],B[1]-c[1],B[2]-c[2]],v),dot3([B[0]-c[0],B[1]-c[1],B[2]-c[2]],u)));
+  return pts;
+}
+function planeBasis(n){const helper=Math.abs(n[2])<.9?[0,0,1]:[0,1,0];const u=norm3(cross3(helper,n));const v=cross3(n,u);return{u,v};}
+
+/* ================= navegación ================= */
+const slides=$$('.slide'); let cur=0; const hooks={};
+const crumbs=$('#crumbs');
+slides.forEach((s,n)=>{const b=document.createElement('button');b.className='crumb';b.textContent=s.dataset.crumb;b.addEventListener('click',()=>go(n));crumbs.appendChild(b);});
+const dirty=new Set(); let raf=0;
+function redraw(...keys){keys.forEach(k=>dirty.add(k)); if(!raf) raf=requestAnimationFrame(flush);}
+function flush(){raf=0;const ks=new Set(dirty);dirty.clear();const h=hooks[slides[cur].id];if(h&&h.draw){try{h.draw(ks.has('*')?null:ks);}catch(err){console.error(err);}}}
+function go(n){
+  n=clamp(n,0,slides.length-1);
+  const old=hooks[slides[cur].id]; if(old&&old.leave) old.leave();
+  slides[cur].classList.remove('on'); cur=n; slides[cur].classList.add('on');
+  $$('.crumb').forEach((b,i)=>b.classList.toggle('on',i===cur));
+  $('#count').textContent=`${cur+1} / ${slides.length}`;
+  try{history.replaceState(null,'','#'+slides[cur].id);}catch(e){}
+  const h=hooks[slides[cur].id]; if(h&&h.enter) h.enter();
+  redraw('*');
+}
+$('#prev').addEventListener('click',()=>go(cur-1));
+$('#next').addEventListener('click',()=>go(cur+1));
+$('#fs').addEventListener('click',toggleFS);
+function toggleFS(){try{if(!document.fullscreenElement){const p=document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen();if(p&&p.catch)p.catch(()=>{});}else document.exitFullscreen();}catch(e){}}
+document.addEventListener('keydown',e=>{
+  const t=e.target; if(t&&(t.isContentEditable||t.tagName==='INPUT'&&t.type!=='checkbox'||t.tagName==='SELECT')) return;
+  if(e.key==='ArrowRight'||e.key==='PageDown'){go(cur+1);e.preventDefault();}
+  else if(e.key==='ArrowLeft'||e.key==='PageUp'){go(cur-1);e.preventDefault();}
+  else if(e.key==='f'||e.key==='F'){toggleFS();}
+});
+window.addEventListener('resize',()=>redraw('*'));
+
+/* ================= 0 PORTADA ================= */
+(function(){
+  const cv=$('#cv0'); const st={yaw:.5,pitch:-.45,mode:'dvr',N:124};
+  const reduce=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const spin=$('#spin0'); if(reduce) spin.checked=false;
+  let anim=0,last=0,fr=0,acc=0;
+  dragRotate(cv,st,()=>redraw('r'));
+  function loop(t){
+    anim=0; if(slides[cur].id!=='portada') return;
+    if(spin.checked){st.yaw+=.006;redraw('r');}
+    if(last){acc+=t-last;fr++;if(acc>1000){$('#fps0').textContent=Math.round(fr*1000/acc)+' fps';acc=0;fr=0;}} last=t;
+    anim=requestAnimationFrame(loop);
+  }
+  hooks.portada={
+    enter(){last=0;if(!anim)anim=requestAnimationFrame(loop);},
+    leave(){if(anim)cancelAnimationFrame(anim);anim=0;},
+    draw(){drawRender(cv,st,(ctx,w,h,P)=>drawBox(ctx,P,'rgba(147,164,182,.35)'));}
+  };
+  spin.addEventListener('change',()=>{if(spin.checked&&!anim)anim=requestAnimationFrame(loop);});
+})();
+
+/* ================= 1 PROYECTO ================= */
+(function(){
+  const steps=[
+    {nm:'Cargar las imágenes',t:['3.1','3.2'],d:'Lee las rebanadas de la tomografía, las apila en un cubo de números y anota dónde está cada una en milímetros.'},
+    {nm:'Preparar los datos',t:['3.1','3.3','3.6','3.9'],d:'Pasa los números a una escala común, encuentra los bordes de los órganos, alinea estudios de distintas fechas y corrige el movimiento de la respiración.'},
+    {nm:'Vistas 2D',t:['3.4','3.10'],d:'Muestra el cuerpo acostado, de frente y de costado, cada vista en su propio rectángulo de la pantalla.'},
+    {nm:'Dibujo 3D',t:['3.5','3.7','3.11'],d:'Lanza un rayo por cada pixel a través del cubo de números y va sumando colores. Solo procesa lo que la cámara ve.'},
+    {nm:'Realidad virtual',t:['3.8','3.10','3.5'],d:'Sigue la cabeza del médico sin trabarse, dibuja una imagen para cada ojo y deja cortar el cuerpo con un plano.'},
+    {nm:'Revisar la cirugía',t:['3.3','3.11'],d:'Mide distancias y avisa si la aguja planeada choca con una estructura importante.'}
+  ];
+  const today=new Set();
+  const pipe=$('#pipe'), det=$('#pipeDetail');
+  function show(n){
+    $$('.step',pipe).forEach((b,i)=>b.classList.toggle('on',i===n));
+    const s=steps[n];
+    det.innerHTML=`<div class="kicker">Paso ${n+1}</div><h2 style="font-size:1.35em">${s.nm}</h2><p>${s.d}</p><div class="btns">${s.t.map(t=>`<span class="tag${today.has(t)?' today':''}">${t}${today.has(t)?' · hoy':''}</span>`).join('')}</div>`;
+  }
+  steps.forEach((s,n)=>{
+    const b=document.createElement('button'); b.className='step';
+    b.innerHTML=`<span class="n">${String(n+1).padStart(2,'0')}</span><span class="nm">${s.nm}</span><span class="tags">${s.t.map(t=>`<span class="tag${today.has(t)?' today':''}">${t}</span>`).join('')}</span>`;
+    b.addEventListener('click',()=>show(n)); pipe.appendChild(b);
+  });
+  show(0);
+  hooks.proyecto={draw(){}};
+})();
+
+/* ================= 2 DATOS ================= */
+(function(){
+  const st={k:39}; const cvS=$('#cvStack'), cvL=$('#cvSl');
+  const cache={};
+  function rgba(k){
+    if(cache[k]) return cache[k];
+    const c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d');const id=x.createImageData(W,H);
+    for(let i=0;i<H;i++)for(let j=0;j<W;j++){const hu=vol[IDX(k,i,j)],p=(i*W+j)*4,g=gray(hu,40,500);id.data[p]=g;id.data[p+1]=g;id.data[p+2]=g;id.data[p+3]=hu<-900?0:230;}
+    x.putImageData(id,0,0); return cache[k]=c;
+  }
+  bindRange('k2',v=>{st.k=v;redraw('*');});
+  hooks.datos={draw(){
+    {const {ctx,w,h,dpr}=fit(cvS); ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);
+      const s=Math.min(w*.9/(1.732*W),h*.42/W), hstep=(h*.9-W*s)/D, cx=w/2, base=h*.05+W*0+D*hstep;
+      const list=[]; for(let k=0;k<D;k+=4) list.push(k); if(!list.includes(st.k)) list.push(st.k); list.sort((a,b)=>a-b);
+      for(const k of list){
+        const isCur=k===st.k, f=h*.05+(D-1-k)*hstep;
+        ctx.setTransform(dpr*.866*s,dpr*.5*s,-dpr*.866*s,dpr*.5*s,dpr*cx,dpr*f);
+        ctx.globalAlpha=isCur?1:.5; ctx.drawImage(rgba(k),0,0);
+        ctx.globalAlpha=1; ctx.lineWidth=(isCur?2.5:.8)/s; ctx.strokeStyle=isCur?CSS['--accent']:'rgba(147,164,182,.35)'; ctx.strokeRect(0,0,W,H);
+      }
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+      label(ctx,'cabeza (k = 63)',8,18,CSS['--muted']); label(ctx,'pies (k = 0)',8,h-8,CSS['--muted']);
+      label(ctx,'k = '+st.k,w-8,18,CSS['--accent'],'right');
+      void base;
+    }
+    {const {ctx,w,h}=fit(cvL); ctx.imageSmoothingEnabled=true; ctx.drawImage(sliceImg('ax',st.k,hu=>gray(hu,40,500)),0,0,w,h);
+      label(ctx,'A',w/2,16,CSS['--muted'],'center');label(ctx,'P',w/2,h-6,CSS['--muted'],'center');label(ctx,'R',6,h/2,CSS['--muted']);label(ctx,'L',w-6,h/2,CSS['--muted'],'right');}
+    const z=OZ+st.k*DZ;
+    const rows=[['(0010,0010)','PatientName','ANONIMO^FANTOMA'],['(0020,0013)','InstanceNumber',st.k+1],['(0028,0010)','Rows','128'],['(0028,0011)','Columns','128'],
+      ['(0020,0032)','ImagePositionPatient',`${OX}\\${OY}\\${nf(z,1)}`],['(0020,0037)','ImageOrientationPatient','1\\0\\0\\0\\1\\0'],['(0028,0030)','PixelSpacing','2.5\\2.5'],
+      ['(0018,0050)','SliceThickness','5'],['(0028,1053)','RescaleSlope','1'],['(0028,1052)','RescaleIntercept','−1024']];
+    $('#hdr').innerHTML=rows.map(r=>`<span class="g">${r[0]}</span><span>${r[1]}</span><span class="v">${r[2]}</span>`).join('');
+  }};
+})();
+
+/* ================= 3.1 ================= */
+(function(){
+  const st={k:39,wl:40,ww:400,i:58,j:90,seg:true,a:75,b:125,name:'Tumor',count:0};
+  const cv=$('#cv31'), tf=$('#tf31'), mx=$('#mx31');
+  function countSeg(){let n=0;for(let p=0;p<vol.length;p++){const v=vol[p];if(v>=st.a&&v<=st.b)n++;}st.count=n;}
+  countSeg();
+  bindBtns('segp31',d=>{st.a=Number(d.a);st.b=Number(d.b);st.name=d.a==='75'?'Tumor':d.a==='250'?'Hueso':'Pulmón';countSeg();redraw('*');});
+  $('#seg31').addEventListener('change',e=>{st.seg=e.target.checked;redraw('*');});
+  mx.innerHTML=Array.from({length:7},()=>'<tr>'+'<td></td>'.repeat(7)+'</tr>').join('');
+  const cells=$$('td',mx);
+  bindRange('k31',v=>{st.k=v;redraw('*');});
+  const wlEl=bindRange('wl31',v=>{st.wl=v;redraw('*');}), wwEl=bindRange('ww31',v=>{st.ww=v;redraw('*');});
+  bindBtns('pre31',d=>{wlEl.value=d.wl;wwEl.value=d.ww;wlEl.dispatchEvent(new Event('input'));wwEl.dispatchEvent(new Event('input'));});
+  const mv=e=>{const[a,b]=pos(e,cv);st.j=clamp(Math.floor(a*W),0,W-1);st.i=clamp(Math.floor(b*H),0,H-1);redraw('*');};
+  cv.addEventListener('pointermove',mv); cv.addEventListener('pointerdown',mv);
+  const tissues=[['Aire',-1000],['Pulmón',-820],['Grasa',-100],['Músculo',40],['Tumor',95],['Vaso',180],['Hueso',700]];
+  hooks['t3-1']={draw(){
+    const {k,wl,ww,i,j}=st; $('#k31t').textContent=k;
+    let nSl=0;
+    {const {ctx,w,h}=fit(cv); ctx.imageSmoothingEnabled=false; ctx.drawImage(sliceImg('ax',k,hu=>gray(hu,wl,ww)),0,0,w,h);
+      if(st.seg) ctx.drawImage(sliceImg('ax',k,hu=>{if(hu>=st.a&&hu<=st.b){nSl++;return[242,184,75,150];}return[0,0,0,0];}),0,0,w,h);
+      else for(let p=k*W*H;p<(k+1)*W*H;p++){if(vol[p]>=st.a&&vol[p]<=st.b)nSl++;}
+      const cw=w/W; ctx.strokeStyle=CSS['--accent']; ctx.lineWidth=1.5; ctx.strokeRect((j-3)*cw,(i-3)*cw,7*cw,7*cw);
+      label(ctx,'A',w/2,16,CSS['--muted'],'center');label(ctx,'R',6,h/2,CSS['--muted']);label(ctx,'L',w-6,h/2,CSS['--muted'],'right');}
+    let n=0; for(let di=-3;di<=3;di++)for(let dj=-3;dj<=3;dj++){const hu=V(k,i+di,j+dj),g=Math.round(gray(hu,wl,ww));const c=cells[n++];c.textContent=hu;c.style.background=`rgb(${g},${g},${g})`;c.style.color=g>140?'#000':'#fff';c.className=(di===0&&dj===0)?'c':'';}
+    const hu=V(k,i,j), raw=hu+1024, g=gray(hu,wl,ww), ini=wl-ww/2;
+    $('#ro31').innerHTML=`<span>índice</span><span>V[${k}][${i}][${j}]</span><span>valor guardado</span><span>${raw}</span><span>HU</span><span>${nf(hu,0)}</span><span>gris</span><span>${Math.round(g)}</span><span>tejido</span><span>${tissue(hu)}</span>`;
+    $('#f31a').textContent=`${raw} · 1 + (−1024) = ${nf(hu,0)} HU`;
+    const vv=DX*DY*DZ, mm3=st.count*vv;
+    $('#f31c').textContent=`${st.count} voxels × ${vv} mm³ = ${nf(mm3/1000,1)} cm³ (${st.name.toLowerCase()})`;
+    $('#seg31o').innerHTML=`<span>rango</span><span>${nf(st.a,0)} ≤ HU ≤ ${nf(st.b,0)}</span><span>en esta rebanada</span><span>${nSl} voxels</span><span>en todo el tensor</span><span>${st.count} voxels</span><span>volumen</span><span>${nf(mm3/1000,1)} cm³${st.name==='Tumor'?' (real del fantoma: esfera r = 16 mm ≈ 17.2 cm³)':''}</span>`;
+    const rawg=255*(hu-ini)/ww;
+    $('#f31b').textContent=`255 · (${nf(hu,0)} − (${nf(ini,0)})) / ${ww} = ${nf(rawg,0)} → ${Math.round(g)}${rawg<0?' (negro)':rawg>255?' (blanco)':''}`;
+    {const {ctx,w,h}=fit(tf); ctx.fillStyle=CSS['--panel-2'];ctx.fillRect(0,0,w,h);
+      const pl=36,pr=12,pt=12,pb=24, X=v=>pl+(v+1100)/2200*(w-pl-pr), Y=v=>pt+(1-v/255)*(h-pt-pb);
+      ctx.font='11px '+MONO; ctx.fillStyle=CSS['--muted']; ctx.strokeStyle=CSS['--line']; ctx.lineWidth=1;
+      for(const v of[-1000,-500,0,500,1000]){ctx.beginPath();ctx.moveTo(X(v),pt);ctx.lineTo(X(v),h-pb);ctx.stroke();ctx.textAlign='center';ctx.fillText(nf(v,0),X(v),h-8);}
+      for(const v of[0,128,255]){ctx.beginPath();ctx.moveTo(pl,Y(v));ctx.lineTo(w-pr,Y(v));ctx.stroke();ctx.textAlign='right';ctx.fillText(v,pl-5,Y(v)+4);}
+      const a=clamp(ini,-1100,1100),b=clamp(wl+ww/2,-1100,1100); ctx.fillStyle='rgba(242,184,75,.13)'; ctx.fillRect(X(a),pt,X(b)-X(a),h-pt-pb);
+      ctx.strokeStyle=CSS['--cyan'];ctx.lineWidth=2.5;ctx.beginPath();for(let s=0;s<=440;s++){const v=-1100+s*5;const yy=Y(gray(v,wl,ww));s?ctx.lineTo(X(v),yy):ctx.moveTo(X(v),yy);}ctx.stroke();
+      ctx.strokeStyle=CSS['--accent'];ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(X(clamp(hu,-1100,1100)),pt);ctx.lineTo(X(clamp(hu,-1100,1100)),h-pb);ctx.stroke();ctx.setLineDash([]);
+      tissues.forEach(([nm,v],n)=>{const gg=gray(v,wl,ww);ctx.fillStyle=`rgb(${gg},${gg},${gg})`;ctx.strokeStyle=CSS['--accent'];ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(X(v),Y(gg),5,0,7);ctx.fill();ctx.stroke();
+        label(ctx,nm,X(v)+(n%2?7:-7),Y(gg)+(gg>200?16:-8),CSS['--fg'],n%2?'left':'right');});
+    }
+  }};
+})();
+
+/* ================= 3.2 ================= */
+(function(){
+  const st={k:39,i:58,j:90,cubo:false,grid:false};
+  const cA=$('#cv32a'), cC=$('#cv32c');
+  bindRange('k32',v=>{st.k=v;redraw('*');});
+  $('#grid32').addEventListener('change',e=>{st.grid=e.target.checked;redraw('*');});
+  bindBtns('dz32',d=>{st.cubo=d.v==='cubo';redraw('*');});
+  const pick=e=>{const[a,b]=pos(e,cA);st.j=clamp(Math.floor(a*W),0,W-1);st.i=clamp(Math.floor(b*H),0,H-1);redraw('*');};
+  cA.addEventListener('pointerdown',pick);
+  hooks['t3-2']={draw(){
+    const {k,i,j}=st; const x=OX+j*DX,y=OY+i*DY,z=OZ+k*DZ; let uu=0,vv=0;
+    {const {ctx,w,h}=fit(cA); ctx.imageSmoothingEnabled=false; ctx.drawImage(sliceImg('ax',k,hu=>gray(hu,40,400)),0,0,w,h);
+      const cw=w/W;
+      if(st.grid){ctx.strokeStyle='rgba(98,210,216,.25)';ctx.lineWidth=.5;ctx.beginPath();for(let n=0;n<=W;n++){ctx.moveTo(n*cw,0);ctx.lineTo(n*cw,h);ctx.moveTo(0,n*cw);ctx.lineTo(w,n*cw);}ctx.stroke();}
+      uu=(j+.5)*cw; vv=(i+.5)*cw;
+      ctx.strokeStyle='rgba(242,184,75,.6)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(uu,0);ctx.lineTo(uu,h);ctx.moveTo(0,vv);ctx.lineTo(w,vv);ctx.stroke();
+      ctx.fillStyle=CSS['--accent'];ctx.beginPath();ctx.arc(uu,vv,5,0,7);ctx.fill();
+      // origen y ejes
+      ctx.strokeStyle=CSS['--cyan'];ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(4,4);ctx.lineTo(60,4);ctx.moveTo(4,4);ctx.lineTo(4,60);ctx.stroke();
+      label(ctx,'O · j →',10,20,CSS['--cyan']); label(ctx,'i ↓',8,74,CSS['--cyan']);
+      label(ctx,'A (anterior)',w/2,16,CSS['--muted'],'center');label(ctx,'P (posterior)',w/2,h-8,CSS['--muted'],'center');label(ctx,'R',8,h/2,CSS['--muted']);label(ctx,'L',w-8,h/2,CSS['--muted'],'right');
+      label(ctx,`(${nf(x,1)}, ${nf(y,1)}, ${nf(z,1)}) mm`,clamp(uu+10,4,w-170),clamp(vv-10,30,h-30),CSS['--accent']);
+    }
+    {const {ctx,w,h}=fit(cC); ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);
+      const ih=st.cubo? w*(D/W) : w*(D*DZ)/(W*DX); const oy=(h-ih)/2;
+      ctx.imageSmoothingEnabled=true; ctx.drawImage(sliceImg('cor',i,hu=>gray(hu,40,400)),0,oy,w,ih);
+      ctx.strokeStyle=CSS['--line'];ctx.strokeRect(.5,oy+.5,w-1,ih-1);
+      const px=(j+.5)*w/W, py=oy+(D-1-k+.5)*ih/D;
+      ctx.strokeStyle='rgba(242,184,75,.6)';ctx.beginPath();ctx.moveTo(0,py);ctx.lineTo(w,py);ctx.stroke();
+      ctx.fillStyle=CSS['--accent'];ctx.beginPath();ctx.arc(px,py,5,0,7);ctx.fill();
+      label(ctx,st.cubo?'Δz dibujado = 2.5 mm → aplastado':'Δz dibujado = 5 mm → proporción real',8,h-8,st.cubo?CSS['--ax']:CSS['--sag']);
+      label(ctx,'S (cabeza)',w/2,oy+16,CSS['--muted'],'center');
+    }
+    $('#f32a').textContent=`x = −160 + ${j}·2.5 = ${nf(x,1)} mm`;
+    $('#f32b').textContent=`y = −160 + ${i}·2.5 = ${nf(y,1)} mm`;
+    $('#f32c').textContent=`z = −160 + ${k}·5 = ${nf(z,1)} mm`;
+    $('#ro32').innerHTML=`<span>voxel (i, j, k)</span><span>(${i}, ${j}, ${k})</span><span>paciente (x, y, z)</span><span>(${nf(x,1)}, ${nf(y,1)}, ${nf(z,1)}) mm</span><span>pantalla (u, v)</span><span>(${Math.round(uu)}, ${Math.round(vv)}) px</span><span>valor</span><span>${V(k,i,j)} HU · ${tissue(V(k,i,j))}</span>`;
+  }};
+})();
+
+/* ================= 3.3 ================= */
+(function(){
+  const st={k:39,i:58,j:90,mode:'img',arrows:true,E:[132,-45]};
+  const KT=Math.round((TUMOR.z-OZ)/DZ), T2=[TUMOR.x,TUMOR.y];
+  const CRIT=[{nm:'aorta',c:[24,40],r:13},{nm:'columna',c:[0,62],r:20},{nm:'esternón',c:[0,-96],r:9}];
+  function needle(){
+    const E=st.E, dv=[T2[0]-E[0],T2[1]-E[1]], L=Math.hypot(dv[0],dv[1])||1, u=[dv[0]/L,dv[1]/L];
+    const res=CRIT.map(s=>{const t=clamp((s.c[0]-E[0])*u[0]+(s.c[1]-E[1])*u[1],0,L);const Q=[E[0]+u[0]*t,E[1]+u[1]*t];return{...s,t,Q,d:Math.hypot(s.c[0]-Q[0],s.c[1]-Q[1])-s.r};});
+    let hit=null; const zT=OZ+KT*DZ;
+    for(let s=0;s<=L-TUMOR.r;s+=1){const x=E[0]+u[0]*s,y=E[1]+u[1]*s,hu=sampleMM(x,y,zT);if(hu>=250){hit={what:'hueso',s,x,y};break;}if(hu>=150){hit={what:'un vaso',s,x,y};break;}}
+    return{u,L,res,hit};
+  }
+  bindBtns('nd33',d=>{st.E=[Number(d.x),Number(d.y)];redraw('a');});
+  const r3={yaw:.6,pitch:-.35,mode:'iso',iso:300,lighting:true,N:150,wantNormals:true,az:35,el:30};
+  const cA=$('#cv33a'), cB=$('#cv33b');
+  bindRange('k33',v=>{st.k=v;redraw('a');});
+  bindRange('az33',v=>{r3.az=v;redraw('b');},v=>v+'°'); bindRange('el33',v=>{r3.el=v;redraw('b');},v=>v+'°');
+  bindBtns('mode33',d=>{st.mode=d.v;redraw('a');});
+  bindBtns('iso33',d=>{r3.iso=Number(d.v);redraw('b');});
+  $('#arr33').addEventListener('change',e=>{st.arrows=e.target.checked;redraw('a');});
+  $('#lit33').addEventListener('change',e=>{r3.lighting=e.target.checked;redraw('b');});
+  cA.addEventListener('pointermove',e=>{const[a,b]=pos(e,cA);st.j=clamp(Math.floor(a*W),1,W-2);st.i=clamp(Math.floor(b*H),1,H-2);redraw('a');});
+  cA.addEventListener('pointerdown',e=>{const[a,b]=pos(e,cA);st.E=[OX+a*W*DX,OY+b*H*DY];$$('.btn',$('#nd33')).forEach(x=>x.classList.remove('on'));redraw('a');});
+  function lightVec(){const c=camBasis(r3.yaw,r3.pitch),az=r3.az*Math.PI/180,el=r3.el*Math.PI/180;
+    return norm3([0,1,2].map(n=>-c.fwd[n]*Math.cos(el)*Math.cos(az)+c.right[n]*Math.cos(el)*Math.sin(az)+c.up[n]*Math.sin(el)));}
+  dragRotate(cB,r3,()=>redraw('b'),e=>{
+    const[a,b]=pos(e,cB);const N=r3.normalsN||0;if(!r3.normals||!N)return;const qx=clamp(Math.floor(a*N),0,N-1),py=clamp(Math.floor(b*N),0,N-1),p=(py*N+qx)*3;
+    const n=[r3.normals[p],r3.normals[p+1],r3.normals[p+2]];const L=lightVec();
+    if(n[0]===0&&n[1]===0&&n[2]===0){$('#f33c').textContent='(el cursor no está sobre la superficie)';return;}
+    const nl=dot3(n,L);$('#f33c').textContent=`N=(${nf(n[0],2)}, ${nf(n[1],2)}, ${nf(n[2],2)})  L=(${nf(L[0],2)}, ${nf(L[1],2)}, ${nf(L[2],2)})  N·L=${nf(nl,2)} → brillo ${nf(.16+.84*Math.max(0,nl),2)}`;
+  });
+  hooks['t3-3']={draw(ks){
+    if(!ks||ks.has('a')){
+      const {k,i,j}=st; const {ctx,w,h}=fit(cA); const cw=w/W;
+      ctx.imageSmoothingEnabled=false;
+      if(st.mode==='img') ctx.drawImage(sliceImg('ax',k,hu=>gray(hu,40,500)),0,0,w,h);
+      else ctx.drawImage(sliceImg('ax',k,(hu,r,c)=>{const g=grad(k,r,c);const m=Math.hypot(g[0],g[1],g[2]);return 255*Math.min(1,Math.sqrt(m/250));}),0,0,w,h);
+      if(st.arrows){ctx.strokeStyle=CSS['--accent'];ctx.fillStyle=CSS['--accent'];ctx.lineWidth=1.2;
+        for(let r=2;r<H-2;r+=4)for(let c=2;c<W-2;c+=4){const g=grad(k,r,c);const m=Math.hypot(g[0],g[1]);if(m<12)continue;
+          const len=Math.min(1,m/120)*cw*3.6, ux=g[0]/m, uy=g[1]/m, x0=(c+.5)*cw, y0=(r+.5)*cw, x1=x0+ux*len, y1=y0+uy*len;
+          ctx.beginPath();ctx.moveTo(x0,y0);ctx.lineTo(x1,y1);ctx.stroke();ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x1-ux*4-uy*2.5,y1-uy*4+ux*2.5);ctx.lineTo(x1-ux*4+uy*2.5,y1-uy*4-ux*2.5);ctx.fill();}}
+      const g=grad(k,i,j), m=Math.hypot(g[0],g[1],g[2]);
+      ctx.strokeStyle=CSS['--cyan'];ctx.lineWidth=2;ctx.strokeRect((j-.5)*cw,(i-.5)*cw,2*cw,2*cw);
+      if(m>1){const s=Math.min(60,m*.6);ctx.beginPath();ctx.moveTo((j+.5)*cw,(i+.5)*cw);ctx.lineTo((j+.5)*cw+g[0]/m*s,(i+.5)*cw+g[1]/m*s);ctx.stroke();}
+      $('#f33a').textContent=`∇I = (${nf(g[0],1)}, ${nf(g[1],1)}, ${nf(g[2],1)})   |∇I| = ${nf(m,1)}`;
+      $('#f33b').textContent=m>1?`N = −∇I/|∇I| = (${nf(-g[0]/m,2)}, ${nf(-g[1]/m,2)}, ${nf(-g[2]/m,2)})  ${m>40?'→ borde':'→ interior'}`:'N indefinida: zona uniforme (sin borde)';
+      const nd=needle(), S2=p=>[(p[0]-OX)/DX*cw,(p[1]-OY)/DY*cw];
+      const bad=nd.hit||nd.res.some(r=>r.d<10);
+      if(Math.abs(k-KT)<=3){
+        const e=S2(st.E), t=S2(T2), col=bad?CSS['--ax']:CSS['--sag'];
+        nd.res.forEach(r=>{const c=S2(r.c),q=S2(r.Q);ctx.strokeStyle=r.d<10?CSS['--ax']:'rgba(232,238,244,.7)';ctx.lineWidth=1.2;ctx.setLineDash([4,3]);ctx.beginPath();ctx.moveTo(c[0],c[1]);ctx.lineTo(q[0],q[1]);ctx.stroke();ctx.setLineDash([]);
+          ctx.beginPath();ctx.arc(c[0],c[1],r.r/DX*cw,0,7);ctx.stroke();label(ctx,r.d<0?`${r.nm}: la cruza`:`${r.nm} ${nf(r.d,0)} mm`,c[0]+r.r/DX*cw+4,c[1]+4,r.d<10?CSS['--ax']:CSS['--fg']);});
+        ctx.strokeStyle=col;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(e[0],e[1]);ctx.lineTo(t[0],t[1]);ctx.stroke();
+        ctx.fillStyle=col;ctx.beginPath();ctx.arc(e[0],e[1],6,0,7);ctx.fill();label(ctx,'E',e[0]+8,e[1]-8,col);
+        ctx.strokeStyle='#ffb833';ctx.lineWidth=2;ctx.beginPath();ctx.arc(t[0],t[1],TUMOR.r/DX*cw,0,7);ctx.stroke();label(ctx,'T',t[0]+TUMOR.r/DX*cw+4,t[1]-6,'#ffb833');
+        if(nd.hit){const p=S2([nd.hit.x,nd.hit.y]);ctx.strokeStyle=CSS['--ax'];ctx.lineWidth=2.5;ctx.beginPath();ctx.moveTo(p[0]-8,p[1]-8);ctx.lineTo(p[0]+8,p[1]+8);ctx.moveTo(p[0]+8,p[1]-8);ctx.lineTo(p[0]-8,p[1]+8);ctx.stroke();}
+      }
+      $('#f33u').textContent=`u = (T − E)/|T − E| = (${nf(nd.u[0],2)}, ${nf(nd.u[1],2)})   largo = ${nf(nd.L,0)} mm`;
+      const ao=nd.res[0], co=nd.res[1];
+      const dTxt=d=>d<0?'la atraviesa ⚠':d<10?`distancia ${nf(d,1)} mm ⚠`:`distancia ${nf(d,1)} mm ✓`;
+      $('#f33d').textContent=`aorta: t = (C − E)·u = ${nf(ao.t,0)} mm → ${dTxt(ao.d)}`;
+      $('#f33e').textContent=`columna: t = ${nf(co.t,0)} mm → ${dTxt(co.d)}`;
+      $('#f33f').textContent=nd.hit?`intersección: choca con ${nd.hit.what} a ${nf(nd.hit.s,0)} mm de E ⚠`:'intersección: el camino solo cruza tejido blando y pulmón ✓';
+      $('#nd33o').innerHTML=Math.abs(k-KT)<=3?(bad?'<b class="bad">Trayectoria peligrosa.</b> Mueve la entrada E.':'<b class="ok">Trayectoria segura.</b> Margen de 10 mm respetado.'):`La aguja se dibuja en la rebanada del tumor: vuelve a k = ${KT}.`;
+    }
+    if(!ks||ks.has('b')){r3.L=lightVec();drawRender(cB,r3,(ctx,w,h,P,cam)=>{
+      drawBox(ctx,P,'rgba(147,164,182,.3)');
+      const c=[w-44,44];ctx.strokeStyle=CSS['--accent'];ctx.lineWidth=2;const Lp=[dot3(r3.L,cam.right),dot3(r3.L,cam.up)];
+      ctx.beginPath();ctx.arc(c[0],c[1],22,0,7);ctx.stroke();ctx.beginPath();ctx.moveTo(c[0],c[1]);ctx.lineTo(c[0]+Lp[0]*22,c[1]-Lp[1]*22);ctx.stroke();label(ctx,'L',c[0]+Lp[0]*22+4,c[1]-Lp[1]*22,CSS['--accent']);
+    });}
+  }};
+})();
+
+/* ================= 3.4 ================= */
+(function(){
+  const st={k:39,i:58,j:90,scale:true}; const cam={yaw:.75,pitch:-.45};
+  const cA=$('#cv34a'),cC=$('#cv34c'),cS=$('#cv34s'),cW=$('#cv34w');
+  $('#sc34').addEventListener('change',e=>{st.scale=e.target.checked;redraw('*');});
+  cA.addEventListener('pointerdown',e=>{const[a,b]=pos(e,cA);st.j=clamp(Math.floor(a*W),0,W-1);st.i=clamp(Math.floor(b*H),0,H-1);redraw('*');});
+  function pickZ(e,cv){const r=cv.getBoundingClientRect();const[a,b]=pos(e,cv);const w=r.width,h=r.height;const ih=st.scale?w*(D*DZ)/(W*DX):w*D/W;const oy=(h-ih)/2;return[a,clamp(Math.floor((1-((b*h-oy)/ih))*D),0,D-1)];}
+  cC.addEventListener('pointerdown',e=>{const[a,k]=pickZ(e,cC);st.j=clamp(Math.floor(a*W),0,W-1);st.k=k;redraw('*');});
+  cS.addEventListener('pointerdown',e=>{const[a,k]=pickZ(e,cS);st.i=clamp(Math.floor(a*H),0,H-1);st.k=k;redraw('*');});
+  dragRotate(cW,cam,()=>redraw('w'));
+  function mpr(cv,kind,idx,hx,hy,colX,colY){
+    const {ctx,w,h}=fit(cv); ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);
+    let ih=h,oy=0; if(kind!=='ax'){ih=st.scale?w*(D*DZ)/(W*DX):w*D/W;oy=(h-ih)/2;}
+    ctx.imageSmoothingEnabled=true; ctx.drawImage(sliceImg(kind,idx,hu=>gray(hu,40,450)),0,oy,w,ih);
+    const X=hx*w, Y=oy+hy*ih; ctx.lineWidth=1.5;
+    ctx.strokeStyle=colX;ctx.beginPath();ctx.moveTo(X,oy);ctx.lineTo(X,oy+ih);ctx.stroke();
+    ctx.strokeStyle=colY;ctx.beginPath();ctx.moveTo(0,Y);ctx.lineTo(w,Y);ctx.stroke();
+    return {ctx,w,h};
+  }
+  hooks['t3-4']={draw(ks){
+    const {k,i,j}=st;
+    if(!ks||ks.has('*')||!ks.has('w')||ks.size>1){
+      mpr(cA,'ax',k,(j+.5)/W,(i+.5)/H,CSS['--sag'],CSS['--cor']);
+      mpr(cC,'cor',i,(j+.5)/W,(D-1-k+.5)/D,CSS['--sag'],CSS['--ax']);
+      mpr(cS,'sag',j,(i+.5)/H,(D-1-k+.5)/D,CSS['--cor'],CSS['--ax']);
+      const dz=st.scale?DZ:DX;
+      $('#f34s').innerHTML=`S = ${matHTML([[DX,0,0],[0,DY,0],[0,0,dz]])} <span>${st.scale?'Δz = 5 mm ✓':'Δz = 2.5 mm → aplastado'}</span>`;
+    }
+    const zf=st.scale?1:DX/DZ; // sin escala, z se comprime
+    const {ctx,w,h}=fit(cW); ctx.fillStyle='#05080b';ctx.fillRect(0,0,w,h);
+    const cb=camBasis(cam.yaw,cam.pitch), P0=projector(cb,230,w,h), P=p=>P0([p[0],p[1],p[2]*zf]);
+    const x=OX+j*DX,y=OY+i*DY,z=OZ+k*DZ;
+    const quad=(pts,col)=>{ctx.fillStyle=col+'33';ctx.strokeStyle=col;ctx.lineWidth=2;ctx.beginPath();pts.forEach((p,n)=>{const q=P(p);n?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]);});ctx.closePath();ctx.fill();ctx.stroke();};
+    quad([[BX0,BY0,z],[BX1,BY0,z],[BX1,BY1,z],[BX0,BY1,z]],CSS['--ax']);
+    quad([[BX0,y,BZ0],[BX1,y,BZ0],[BX1,y,BZ1],[BX0,y,BZ1]],CSS['--cor']);
+    quad([[x,BY0,BZ0],[x,BY1,BZ0],[x,BY1,BZ1],[x,BY0,BZ1]],CSS['--sag']);
+    ctx.strokeStyle='rgba(147,164,182,.6)';ctx.lineWidth=1;ctx.beginPath();for(const[a,b]of EDGES){const p=P(BOX[a]),q=P(BOX[b]);ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);}ctx.stroke();
+    const o=P([0,0,0]);[[[120,0,0],'x (L)'],[[0,120,0],'y (P)'],[[0,0,120],'z (S)']].forEach(([v,t])=>{const q=P(v);ctx.strokeStyle=CSS['--fg'];ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(o[0],o[1]);ctx.lineTo(q[0],q[1]);ctx.stroke();label(ctx,t,q[0]+4,q[1],CSS['--fg']);});
+    const Rm=cb.R;
+    $('#r34').innerHTML=`R = ${matHTML(Rm.map(r=>r.map(v=>Math.round(v*100)/100)))}`;
+    $('#ro34').innerHTML=`<span>giro (Rz)</span><span>${nf(((cam.yaw*180/Math.PI)%360+360)%360,0)}°</span><span>inclinación (Rx)</span><span>${nf(cam.pitch*180/Math.PI,0)}°</span><span>planos</span><span>k=${k} · i=${i} · j=${j}</span>`;
+  }};
+})();
+
+/* ================= 3.5 ================= */
+(function(){
+  const st={th:55,ph:15,d:40,clip:true,vj:90,vi:58,vk:39};
+  const r5={yaw:.9,pitch:-.35,mode:'dvr',N:150,clip:{on:true,n:[0,0,1],d:0}};
+  const cA=$('#cv35a'),cB=$('#cv35b');
+  bindRange('th35',v=>{st.th=v;redraw('*');},v=>v+'°');bindRange('ph35',v=>{st.ph=v;redraw('*');},v=>v+'°');bindRange('d35',v=>{st.d=v;redraw('*');},v=>v+' mm');
+  bindRange('vj35',v=>{st.vj=v;redraw('*');});bindRange('vi35',v=>{st.vi=v;redraw('*');});bindRange('vk35',v=>{st.vk=v;redraw('*');});
+  $('#clip35').addEventListener('change',e=>{st.clip=e.target.checked;redraw('*');});
+  dragRotate(cA,r5,()=>redraw('a'));
+  const normal=()=>{const t=st.th*Math.PI/180,p=st.ph*Math.PI/180;return[Math.sin(t)*Math.cos(p),Math.sin(t)*Math.sin(p),Math.cos(t)];};
+  hooks['t3-5']={draw(ks){
+    const n=normal(), d=st.d; r5.clip={on:st.clip,n,d};
+    const T=[TUMOR.x,TUMOR.y,TUMOR.z], sT=dot3(n,T)-d, cuts=Math.abs(sT)<TUMOR.r;
+    const Pm=[OX+st.vj*DX,OY+st.vi*DY,OZ+st.vk*DZ], sP=dot3(n,Pm)-d;
+    drawRender(cA,r5,(ctx,w,h,P)=>{
+      drawBox(ctx,P,'rgba(147,164,182,.5)');
+      const poly=planePoly(n,d);
+      if(poly.length>2){ctx.fillStyle='rgba(242,184,75,.12)';ctx.strokeStyle=CSS['--accent'];ctx.lineWidth=2;ctx.beginPath();poly.forEach((p,i)=>{const q=P(p);i?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]);});ctx.closePath();ctx.fill();ctx.stroke();
+        const c=poly.reduce((s,p)=>[s[0]+p[0]/poly.length,s[1]+p[1]/poly.length,s[2]+p[2]/poly.length],[0,0,0]);const a=P(c),b=P([c[0]+n[0]*70,c[1]+n[1]*70,c[2]+n[2]*70]);
+        ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();label(ctx,'n',b[0]+4,b[1],CSS['--accent']);}
+      const tp=P(T);ctx.strokeStyle='#ffb833';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(tp[0],tp[1],6,0,7);ctx.stroke();label(ctx,'tumor',tp[0]+9,tp[1]+4,'#ffb833');
+      const pp=P(Pm);ctx.fillStyle=CSS['--cyan'];ctx.beginPath();ctx.arc(pp[0],pp[1],5,0,7);ctx.fill();label(ctx,'P',pp[0]+8,pp[1]-6,CSS['--cyan']);
+    });
+    if(!ks||ks.size>1||!ks.has('a')){
+      const {ctx,w,h}=fit(cB); const M=150, o=getOff('obl',M,M), id=o.ctx.createImageData(M,M), dd=id.data;
+      const {u,v}=planeBasis(n), c0=[n[0]*d,n[1]*d,n[2]*d], E=175;
+      for(let r=0;r<M;r++)for(let c=0;c<M;c++){const s=(c/(M-1)*2-1)*E,t=(1-r/(M-1)*2)*E;const hu=sampleMM(c0[0]+u[0]*s+v[0]*t,c0[1]+u[1]*s+v[1]*t,c0[2]+u[2]*s+v[2]*t);const g=gray(hu,40,500),p=(r*M+c)*4;dd[p]=dd[p+1]=dd[p+2]=g;dd[p+3]=255;}
+      o.ctx.putImageData(id,0,0); ctx.imageSmoothingEnabled=true; ctx.drawImage(o.c,0,0,w,h);
+      if(cuts){const Tp=[T[0]-n[0]*sT,T[1]-n[1]*sT,T[2]-n[2]*sT],rel=[Tp[0]-c0[0],Tp[1]-c0[1],Tp[2]-c0[2]];const cx=(dot3(rel,u)/E+1)/2*w,cy=(1-dot3(rel,v)/E)/2*h,rr=Math.sqrt(TUMOR.r**2-sT**2)/E*w/2;
+        ctx.strokeStyle='#ffb833';ctx.lineWidth=2;ctx.setLineDash([5,4]);ctx.beginPath();ctx.arc(cx,cy,rr+4,0,7);ctx.stroke();ctx.setLineDash([]);label(ctx,'tumor cortado',cx+rr+8,cy,'#ffb833');}
+      label(ctx,`plano: ${nf(n[0],2)}x + ${nf(n[1],2)}y + ${nf(n[2],2)}z = ${d}`,8,h-10,CSS['--accent']);
+    }
+    const Mx=[[DX,0,0,OX],[0,DY,0,OY],[0,0,DZ,OZ],[0,0,0,1]];
+    $('#f35m').innerHTML=`${matHTML(Mx)} ${matHTML([[st.vj],[st.vi],[st.vk],[1]])} = ${matHTML([[Pm[0]],[Pm[1]],[Pm[2]],[1]],true)}`;
+    const Mi=[[1/DX,0,0,-OX/DX],[0,1/DY,0,-OY/DY],[0,0,1/DZ,-OZ/DZ],[0,0,0,1]];
+    $('#f35i').innerHTML=`${matHTML(Mi)} ${matHTML([[Pm[0]],[Pm[1]],[Pm[2]],[1]])} = ${matHTML([[st.vj],[st.vi],[st.vk],[1]],true)}`;
+    $('#f35p').textContent=`π = (${nf(n[0],2)}, ${nf(n[1],2)}, ${nf(n[2],2)}, −${d})   π·P = ${nf(sP,1)} → P ${sP>0.5?'delante (oculto)':sP<-0.5?'detrás (visible)':'sobre el plano'}`;
+    $('#f35t').textContent=`π·tumor = ${nf(sT,1)} mm, radio ${TUMOR.r} mm → ${cuts?'¡el plano CORTA el tumor!':'el plano no toca el tumor'}`;
+    const al=$('#alert35'); al.innerHTML=cuts?'<b class="bad">Alerta:</b> el plano de corte atraviesa el tumor (|π·T| &lt; radio).':'<b class="ok">OK:</b> el plano no toca el tumor.';
+  }};
+})();
+
+/* ================= 3.6 TRANSFORMACIONES AFINES (registro de dos fechas) ================= */
+(function(){
+  const G={s:1.06,th:8*Math.PI/180,tx:12,ty:-9};       // cómo quedó movido el paciente en la fecha 2
+  const st={tx:0,ty:0,th:0,s:1,mode:'mix'};
+  const zS=OZ+39*DZ, A=new Float32Array(W*H), Bm=new Float32Array(W*H), R2=19;
+  const phB=(x,y,z)=>((x-TUMOR.x)**2+(y-TUMOR.y)**2+(z-TUMOR.z)**2<R2*R2&&(x/140)**2+(y/105)**2<1)?95:phantom(x,y,z);
+  {const c=Math.cos(G.th),s=Math.sin(G.th);
+   for(let i=0;i<H;i++)for(let j=0;j<W;j++){const x=OX+j*DX,y=OY+i*DY;A[i*W+j]=vol[IDX(39,i,j)];
+     Bm[i*W+j]=phB(G.s*(c*x-s*y)+G.tx,G.s*(s*x+c*y)+G.ty,zS)+(hash(i*W+j+99991)-.5)*24;}}
+  function sB(x,y){const fj=(x-OX)/DX,fi=(y-OY)/DY;if(fj<0||fi<0||fj>W-1||fi>H-1)return -1000;const j0=fj|0,i0=fi|0,j1=Math.min(j0+1,W-1),i1=Math.min(i0+1,H-1),tj=fj-j0,ti=fi-i0;
+    return (Bm[i0*W+j0]*(1-tj)+Bm[i0*W+j1]*tj)*(1-ti)+(Bm[i1*W+j0]*(1-tj)+Bm[i1*W+j1]*tj)*ti;}
+  // fecha 2 vista con la matriz M elegida: B'(p) = B(M⁻¹ p)
+  function Bp(x,y,p){const c=Math.cos(p.th),s=Math.sin(p.th),px=(x-p.tx)/p.s,py=(y-p.ty)/p.s;return sB(c*px+s*py,-s*px+c*py);}
+  function err(p){let e=0,n=0;for(let i=0;i<H;i+=2)for(let j=0;j<W;j+=2){const a=clamp(A[i*W+j],-1000,1000),b=clamp(Bp(OX+j*DX,OY+i*DY,p),-1000,1000);if(a<-900&&b<-900)continue;e+=Math.abs(a-b);n++;}return n?e/n:0;}
+  const e0=err({tx:0,ty:0,th:0,s:1}), eT=err(G);
+  const txE=bindRange('tx36',v=>{st.tx=v;redraw('*');},v=>v+' mm'), tyE=bindRange('ty36',v=>{st.ty=v;redraw('*');},v=>v+' mm');
+  const rE=bindRange('rot36',v=>{st.th=v*Math.PI/180;redraw('*');},v=>v+'°'), sE=bindRange('sc36',v=>{st.s=v/100;redraw('*');},v=>'× '+(v/100).toFixed(2));
+  bindBtns('mode36',d=>{st.mode=d.v;redraw('*');});
+  function setAll(p){txE.value=p.tx;tyE.value=p.ty;rE.value=p.th*180/Math.PI;sE.value=p.s*100;[txE,tyE,rE,sE].forEach(e=>e.dispatchEvent(new Event('input')));}
+  let anim=0;
+  function animateTo(p){cancelAnimationFrame(anim);const a={...st},t0=performance.now();
+    const f=now=>{const k=Math.min(1,(now-t0)/1400),e=k*k*(3-2*k);setAll({tx:Math.round(a.tx+(p.tx-a.tx)*e),ty:Math.round(a.ty+(p.ty-a.ty)*e),th:a.th+(p.th-a.th)*e,s:a.s+(p.s-a.s)*e});if(k<1)anim=requestAnimationFrame(f);};
+    anim=requestAnimationFrame(f);}
+  const ab=$$('#auto36 .btn'); ab[0].addEventListener('click',()=>animateTo(G)); ab[1].addEventListener('click',()=>animateTo({tx:0,ty:0,th:0,s:1}));
+  hooks['t3-6']={draw(){
+    const {ctx,w,h}=fit($('#cv36'));
+    const o=getOff('reg',W,H), id=o.ctx.createImageData(W,H), d=id.data;
+    for(let i=0;i<H;i++)for(let j=0;j<W;j++){const p=(i*W+j)*4,ga=gray(A[i*W+j],-300,1400),gb=gray(Bp(OX+j*DX,OY+i*DY,st),-300,1400);let r,g,b;
+      if(st.mode==='mix'){r=ga;g=gb;b=gb;}else if(st.mode==='chk'){const c=((i>>4)+(j>>4))&1;r=g=b=c?ga:gb;}else if(st.mode==='a'){r=g=b=ga;}else{r=g=b=gb;}
+      d[p]=r;d[p+1]=g;d[p+2]=b;d[p+3]=255;}
+    o.ctx.putImageData(id,0,0); ctx.imageSmoothingEnabled=true; ctx.drawImage(o.c,0,0,w,h);
+    label(ctx,{mix:'rojo = fecha 1 · celeste = fecha 2 · gris = coinciden',chk:'cuadros alternados: si los bordes siguen derecho, están alineadas',a:'fecha 1 (referencia)',b:'fecha 2 (con la matriz aplicada)'}[st.mode],8,h-10,CSS['--fg']);
+    const e=err(st), al=clamp((e0-e)/(e0-eT),0,1), ok=al>.95;
+    $('#bar36').style.width=(al*100).toFixed(0)+'%';
+    const c=Math.cos(st.th),s=Math.sin(st.th);
+    $('#f36m').innerHTML=`M = ${matHTML([[st.s*c,-st.s*s,st.tx],[st.s*s,st.s*c,st.ty],[0,0,1]].map(r=>r.map(v=>Math.round(v*100)/100)))}`;
+    $('#f36e').textContent=`diferencia entre imágenes: ${nf(e,0)} HU (al inicio ${nf(e0,0)}) → alineación ${nf(al*100,0)} %`;
+    $('#ro36').innerHTML=`<span>mover</span><span>(${st.tx}, ${st.ty}) mm</span><span>girar</span><span>${nf(st.th*180/Math.PI,1)}°</span><span>escalar</span><span>× ${st.s.toFixed(2)}</span><span>estado</span><span>${ok?'<b class="ok">¡Alineadas!</b>':'todavía no coinciden'}</span>`;
+    const t=fit($('#cv36t')),tc=t.ctx,v1=4/3*Math.PI*16**3/1000,v2=4/3*Math.PI*R2**3/1000,sc=t.h*.36/R2;
+    tc.fillStyle=CSS['--panel-2'];tc.fillRect(0,0,t.w,t.h);
+    [[t.w*.27,16,'Fecha 1',v1],[t.w*.73,R2,'Fecha 2',v2]].forEach(([x,r,nm,v])=>{tc.globalAlpha=ok?1:.35;tc.fillStyle='rgba(255,184,51,.35)';tc.strokeStyle='#ffb833';tc.lineWidth=2;tc.beginPath();tc.arc(x,t.h*.5,r*sc,0,7);tc.fill();tc.stroke();tc.globalAlpha=1;label(tc,nm,x,16,CSS['--fg'],'center');label(tc,ok?nf(v,1)+' cm³':'¿?',x,t.h-8,'#ffb833','center');});
+    label(tc,ok?'+'+nf((v2/v1-1)*100,0)+' %':'alinea primero',t.w/2,t.h*.52,ok?CSS['--sag']:CSS['--muted'],'center');
+    $('#f36g').textContent=ok?`tumor: ${nf(v1,1)} → ${nf(v2,1)} cm³ (creció ${nf((v2/v1-1)*100,0)} %)`:'tumor: primero hay que alinear las imágenes';
+    $('#h36').textContent=ok?'Con las imágenes alineadas la comparación es confiable.':'Sin alinear, el tumor de una fecha no cae sobre el de la otra: no se puede comparar.';
+  }};
+})();
+
+/* ================= 3.7 PROYECCIONES (ray casting) ================= */
+(function(){
+  const r7={yaw:.6,pitch:-.3,mode:'dvr',N:140,persp:true,fov:50,pd:560};
+  let hv=[.5,.45];
+  const cA=$('#cv37a'),cD=$('#cv37d'),cP=$('#cv37p');
+  bindBtns('pr37',d=>{r7.persp=d.v==='p';redraw('*');});
+  bindRange('fov37',v=>{r7.fov=v;redraw('*');},v=>v+'°');
+  dragRotate(cA,r7,()=>redraw('*'),e=>{const[a,b]=pos(e,cA);hv=[clamp(a,0,1),clamp(b,0,1)];redraw('p');});
+  function overlay(ctx,w,h,P){drawBox(ctx,P,'rgba(147,164,182,.4)');const x=hv[0]*w,y=hv[1]*h;ctx.strokeStyle=CSS['--accent'];ctx.lineWidth=2;ctx.beginPath();ctx.arc(x,y,7,0,7);ctx.moveTo(x-13,y);ctx.lineTo(x+13,y);ctx.moveTo(x,y-13);ctx.lineTo(x,y+13);ctx.stroke();}
+  hooks['t3-7']={draw(ks){
+    if(!ks||ks.has('*')) drawRender(cA,r7,overlay);
+    else{const {ctx,w,h}=fit(cA),N=r7.fast?84:r7.N;ctx.drawImage(getOff('rc'+N,N,N).c,0,0,w,h);overlay(ctx,w,h,projFor(r7,w,h));}
+    const uu=hv[0]*2-1,vv=1-hv[1]*2,info=rayInfo(r7,uu,vv),tf2=Math.tan(r7.fov*Math.PI/360);
+    // vista desde arriba
+    {const {ctx,w,h}=fit(cD);ctx.fillStyle='#05080b';ctx.fillRect(0,0,w,h);
+      const cam=camBasis(r7.yaw,0),F=cam.fwd,R=cam.right,far=r7.pd+260,sc=Math.min((w-40)/far,(h-20)/420),ex=26,cy=h/2;
+      const S2=(fw,rt)=>[ex+fw*sc,cy+rt*sc], C=(x,y)=>S2(x*F[0]+y*F[1]+r7.pd,x*R[0]+y*R[1]);
+      const cs=[[BX0,BY0],[BX1,BY0],[BX1,BY1],[BX0,BY1]].map(p=>C(p[0],p[1]));
+      ctx.fillStyle='rgba(98,210,216,.07)';ctx.strokeStyle='rgba(147,164,182,.75)';ctx.lineWidth=1.5;ctx.beginPath();cs.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));ctx.closePath();ctx.fill();ctx.stroke();
+      const tp=C(TUMOR.x,TUMOR.y);ctx.fillStyle='#ffb833';ctx.beginPath();ctx.arc(tp[0],tp[1],TUMOR.r*sc,0,7);ctx.fill();
+      for(let n=-4;n<=4;n++){const u=n/4;const a=r7.persp?S2(0,0):S2(60,u*190),b=r7.persp?S2(far,u*tf2*far):S2(far,u*190);ctx.strokeStyle='rgba(242,184,75,.3)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();}
+      {const a=r7.persp?S2(0,0):S2(60,uu*190),b=r7.persp?S2(far,uu*tf2*far):S2(far,uu*190);ctx.strokeStyle=CSS['--accent'];ctx.lineWidth=2.5;ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();}
+      if(r7.persp){const d0=r7.pd*.3,a=S2(d0,-tf2*d0),b=S2(d0,tf2*d0);ctx.strokeStyle=CSS['--cyan'];ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();label(ctx,'pantalla',a[0]+4,a[1]-6,CSS['--cyan']);
+        ctx.fillStyle=CSS['--fg'];ctx.beginPath();ctx.arc(ex,cy,6,0,7);ctx.fill();label(ctx,'ojo',ex-4,cy+20,CSS['--fg']);}
+      else{const a=S2(60,-190),b=S2(60,190);ctx.strokeStyle=CSS['--cyan'];ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();label(ctx,'pantalla',a[0]+4,a[1]-6,CSS['--cyan']);}
+      label(ctx,'vista desde arriba · el rayo elegido en amarillo',8,h-8,CSS['--muted']);
+      label(ctx,'tumor',tp[0]+TUMOR.r*sc+4,tp[1]+4,'#ffb833');
+    }
+    // perfil del rayo
+    {const {ctx,w,h}=fit(cP);ctx.fillStyle=CSS['--panel-2'];ctx.fillRect(0,0,w,h);
+      if(info.miss){label(ctx,'Este rayo no toca el volumen: el pixel queda del color del fondo',w/2,h/2,CSS['--muted'],'center');}
+      else{const pl=44,pr=34,pt=12,pb=40,L=Math.max(1,info.len),X=s=>pl+s/L*(w-pl-pr),Y=v=>pt+(1-(clamp(v,-1000,1000)+1000)/2000)*(h-pt-pb),YA=a=>pt+(1-a)*(h-pt-pb);
+        ctx.strokeStyle=CSS['--line'];ctx.lineWidth=1;ctx.font='11px '+MONO;ctx.fillStyle=CSS['--muted'];
+        for(const v of[-1000,0,1000]){ctx.beginPath();ctx.moveTo(pl,Y(v));ctx.lineTo(w-pr,Y(v));ctx.stroke();ctx.textAlign='right';ctx.fillText(nf(v,0),pl-5,Y(v)+4);}
+        ctx.textAlign='left';ctx.fillText('1',w-pr+5,YA(1)+4);ctx.fillText('0',w-pr+5,YA(0)+4);
+        ctx.textAlign='center';ctx.fillText('0 mm',X(0),h-6);ctx.fillText(nf(L,0)+' mm',X(L),h-6);ctx.fillText('distancia dentro del volumen',(pl+w-pr)/2,h-6);
+        const bw=Math.max(1,(w-pl-pr)*2/L);
+        info.samples.forEach(sm=>{if(!sm.c)return;ctx.fillStyle=`rgba(${sm.c[0]*255|0},${sm.c[1]*255|0},${sm.c[2]*255|0},${Math.min(1,sm.c[3]*4+.15)})`;ctx.fillRect(X(sm.s),h-pb+6,bw,12);});
+        ctx.fillStyle='rgba(242,184,75,.18)';ctx.beginPath();ctx.moveTo(X(0),YA(0));info.samples.forEach(sm=>ctx.lineTo(X(sm.s),YA(sm.a)));ctx.lineTo(X(info.samples[info.samples.length-1].s),YA(0));ctx.closePath();ctx.fill();
+        ctx.strokeStyle=CSS['--accent'];ctx.lineWidth=2;ctx.beginPath();info.samples.forEach((sm,i)=>i?ctx.lineTo(X(sm.s),YA(sm.a)):ctx.moveTo(X(sm.s),YA(sm.a)));ctx.stroke();
+        ctx.strokeStyle=CSS['--cyan'];ctx.lineWidth=1.5;ctx.beginPath();info.samples.forEach((sm,i)=>i?ctx.lineTo(X(sm.s),Y(sm.h)):ctx.moveTo(X(sm.s),Y(sm.h)));ctx.stroke();
+        if(info.stop!==null){ctx.strokeStyle=CSS['--ax'];ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(X(info.stop),pt);ctx.lineTo(X(info.stop),h-pb);ctx.stroke();ctx.setLineDash([]);label(ctx,'ya es opaco: se detiene',X(info.stop)-4,pt+12,CSS['--ax'],'right');}
+      }
+    }
+    const f=1/tf2;
+    $('#f37m').innerHTML=r7.persp?`P = ${matHTML([[f,0,0,0],[0,f,0,0],[0,0,-1.22,-222.22],[0,0,-1,0]].map(r=>r.map(v=>Math.round(v*100)/100)))}`:`P = ${matHTML([['1/190',0,0,0],[0,'1/190',0,0],[0,0,'−2/900','−1.22'],[0,0,0,1]])}`;
+    $('#f37x').textContent=r7.persp?`f = 1/tan(${r7.fov/2}°) = ${nf(f,2)} → un objeto de 100 mm a 400 mm mide ${nf(f*100/400,2)}; a 800 mm mide ${nf(f*100/800,2)} (la mitad)`:'en paralela no se divide por z: lo lejano y lo cercano miden igual';
+    $('#f37r').textContent=info.miss?'este rayo no toca el volumen':`entra a ${nf(info.tn,0)} mm de la cámara · ${info.samples.length} pasos · opacidad final ${nf(info.samples[info.samples.length-1].a,2)}${info.stop!==null?' · se detuvo antes (ya era opaco)':''}`;
+  }};
+})();
+
+/* ================= 3.8 ORIENTACIÓN 3D (cuaterniones) ================= */
+const D2R=Math.PI/180;
+const qAxis=(ax,ang)=>{const s=Math.sin(ang/2);return[Math.cos(ang/2),ax[0]*s,ax[1]*s,ax[2]*s];};
+const qMul=(a,b)=>[a[0]*b[0]-a[1]*b[1]-a[2]*b[2]-a[3]*b[3],a[0]*b[1]+a[1]*b[0]+a[2]*b[3]-a[3]*b[2],a[0]*b[2]-a[1]*b[3]+a[2]*b[0]+a[3]*b[1],a[0]*b[3]+a[1]*b[2]-a[2]*b[1]+a[3]*b[0]];
+const qRot=(q,v)=>{const r=qMul(qMul(q,[0,v[0],v[1],v[2]]),[q[0],-q[1],-q[2],-q[3]]);return[r[1],r[2],r[3]];};
+const qEuler=(y,p,r)=>qMul(qMul(qAxis([0,0,1],y),qAxis([1,0,0],p)),qAxis([0,1,0],r));
+function qSlerp(a,b,t){let d=a[0]*b[0]+a[1]*b[1]+a[2]*b[2]+a[3]*b[3];if(d<0){b=b.map(x=>-x);d=-d;}
+  if(d>.9995){const r=a.map((x,i)=>x+(b[i]-x)*t),l=Math.hypot(...r);return r.map(x=>x/l);}
+  const th=Math.acos(d),s=Math.sin(th);return a.map((x,i)=>(Math.sin((1-t)*th)*x+Math.sin(t*th)*b[i])/s);}
+(function(){
+  const st={y:30,p:20,r:0,t:0};
+  const eA=[-90,40,0],eB=[90,40,0],qA=qEuler(eA[0]*D2R,eA[1]*D2R,eA[2]*D2R),qB=qEuler(eB[0]*D2R,eB[1]*D2R,eB[2]*D2R);
+  const ca=$('#cv38a'),cb=$('#cv38b');
+  bindRange('yaw38',v=>{st.y=v;redraw('*');},v=>v+'°');bindRange('pi38',v=>{st.p=v;redraw('*');},v=>v+'°');bindRange('ro38',v=>{st.r=v;redraw('*');},v=>v+'°');
+  const tE=bindRange('t38',v=>{st.t=v/100;redraw('*');},v=>(v/100).toFixed(2));
+  let an=0; $('#play38 .btn').addEventListener('click',()=>{cancelAnimationFrame(an);const t0=performance.now();const f=now=>{const k=Math.min(1,(now-t0)/2600);tE.value=Math.round(k*100);tE.dispatchEvent(new Event('input'));if(k<1&&slides[cur].id==='t3-8')an=requestAnimationFrame(f);};an=requestAnimationFrame(f);});
+  const view=camBasis(.75,-.42);
+  const mk=(w,h,sc)=>p=>[w/2+(p[0]*view.right[0]+p[1]*view.right[1]+p[2]*view.right[2])*sc,h/2-(p[0]*view.up[0]+p[1]*view.up[1]+p[2]*view.up[2])*sc];
+  const rz=(a,v)=>[v[0]*Math.cos(a)-v[1]*Math.sin(a),v[0]*Math.sin(a)+v[1]*Math.cos(a),v[2]];
+  const rx=(a,v)=>[v[0],v[1]*Math.cos(a)-v[2]*Math.sin(a),v[1]*Math.sin(a)+v[2]*Math.cos(a)];
+  function ring(ctx,P,f,col,lw){ctx.strokeStyle=col;ctx.lineWidth=lw;ctx.beginPath();for(let n=0;n<=96;n++){const q=P(f(n/96*2*Math.PI));n?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]);}ctx.stroke();}
+  function arrow(ctx,P,v,col,lab){const o=P([0,0,0]),q=P(v);ctx.strokeStyle=col;ctx.fillStyle=col;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(o[0],o[1]);ctx.lineTo(q[0],q[1]);ctx.stroke();ctx.beginPath();ctx.arc(q[0],q[1],4,0,7);ctx.fill();if(lab)label(ctx,lab,q[0]+6,q[1]-4,col);}
+  function headset(ctx,P,q,col,alpha){ctx.globalAlpha=alpha;const pts=[[-.3,.08,-.13],[.3,.08,-.13],[.3,.08,.13],[-.3,.08,.13],[-.3,-.1,-.13],[.3,-.1,-.13],[.3,-.1,.13],[-.3,-.1,.13]].map(p=>P(qRot(q,p)));
+    ctx.strokeStyle=col;ctx.lineWidth=2;ctx.beginPath();[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]].forEach(([a,b])=>{ctx.moveTo(pts[a][0],pts[a][1]);ctx.lineTo(pts[b][0],pts[b][1]);});ctx.stroke();
+    arrow(ctx,P,qRot(q,[0,.62,0]),col,'');ctx.globalAlpha=1;}
+  hooks['t3-8']={draw(){
+    const Y=st.y*D2R,Pt=st.p*D2R,Rr=st.r*D2R,q=qEuler(Y,Pt,Rr);
+    {const {ctx,w,h}=fit(ca);ctx.fillStyle='#05080b';ctx.fillRect(0,0,w,h);const P=mk(w,h,Math.min(w,h)*.4);
+      ring(ctx,P,a=>[Math.cos(a),Math.sin(a),0],CSS['--ax'],4);
+      ring(ctx,P,a=>rz(Y,[0,Math.cos(a)*.84,Math.sin(a)*.84]),CSS['--sag'],4);
+      ring(ctx,P,a=>rz(Y,rx(Pt,[Math.cos(a)*.68,0,Math.sin(a)*.68])),CSS['--cor'],4);
+      headset(ctx,P,q,CSS['--accent'],1);
+      label(ctx,'rojo = giro',10,20,CSS['--ax']);label(ctx,'verde = inclinación',10,38,CSS['--sag']);label(ctx,'azul = rotación',10,56,CSS['--cor']);
+      const lock=Math.abs(Math.sin(Pt))>.985;
+      if(lock){ctx.strokeStyle=CSS['--ax'];ctx.lineWidth=3;ctx.strokeRect(3,3,w-6,h-6);label(ctx,'¡BLOQUEO! rojo y azul giran igual',w/2,h-14,CSS['--ax'],'center');}
+      $('#lock38').innerHTML=lock?'<b class="bad">Gimbal lock:</b> con 90° de inclinación, el anillo de giro y el de rotación quedaron sobre el mismo eje. Mover cualquiera de los dos hace lo mismo: se perdió un movimiento.':'Mueve "Inclinación" a 90° para ver el bloqueo.';
+      const ang=2*Math.acos(clamp(q[0],-1,1)),sn=Math.sin(ang/2)||1;
+      $('#f38q').textContent=`q = (${nf(q[0],2)}, ${nf(q[1],2)}, ${nf(q[2],2)}, ${nf(q[3],2)}) → giro de ${nf(ang/D2R,0)}° alrededor del eje (${nf(q[1]/sn,2)}, ${nf(q[2]/sn,2)}, ${nf(q[3]/sn,2)})`;
+      $('#f38e').textContent=`ángulos: giro ${st.y}°, inclinación ${st.p}°, rotación ${st.r}°${lock?' → ¡bloqueado!':''}`;
+    }
+    {const {ctx,w,h}=fit(cb);ctx.fillStyle='#05080b';ctx.fillRect(0,0,w,h);const P=mk(w,h,Math.min(w,h)*.38);
+      ctx.strokeStyle='rgba(147,164,182,.35)';ctx.lineWidth=1;const c=P([0,0,0]);ctx.beginPath();ctx.arc(c[0],c[1],Math.min(w,h)*.38,0,7);ctx.stroke();
+      ring(ctx,P,a=>[Math.cos(a),Math.sin(a),0],'rgba(147,164,182,.25)',1);ring(ctx,P,a=>[0,Math.cos(a),Math.sin(a)],'rgba(147,164,182,.15)',1);
+      const pathE=[],pathS=[];let lenE=0,lenS=0,pe=null,ps=null;
+      for(let n=0;n<=80;n++){const t=n/80;const e=eA.map((v,i)=>v+(eB[i]-v)*t),qe=qEuler(e[0]*D2R,e[1]*D2R,e[2]*D2R),qs=qSlerp(qA,qB,t);
+        const fe=qRot(qe,[0,1,0]),fs=qRot(qs,[0,1,0]);if(pe){lenE+=Math.acos(clamp(dot3(pe,fe),-1,1));lenS+=Math.acos(clamp(dot3(ps,fs),-1,1));}pe=fe;ps=fs;pathE.push(P(fe));pathS.push(P(fs));}
+      const line=(pts,col,dash)=>{ctx.strokeStyle=col;ctx.lineWidth=3;ctx.setLineDash(dash||[]);ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));ctx.stroke();ctx.setLineDash([]);};
+      line(pathE,CSS['--accent'],[7,5]);line(pathS,CSS['--cyan']);
+      const e=eA.map((v,i)=>v+(eB[i]-v)*st.t),qe=qEuler(e[0]*D2R,e[1]*D2R,e[2]*D2R),qs=qSlerp(qA,qB,st.t);
+      headset(ctx,P,qe,CSS['--accent'],.55);headset(ctx,P,qs,CSS['--cyan'],1);
+      const a0=pathS[0],a1=pathS[pathS.length-1];label(ctx,'inicio',a0[0]+6,a0[1]+14,CSS['--fg']);label(ctx,'final',a1[0]+6,a1[1]+14,CSS['--fg']);
+      label(ctx,`ángulos: recorre ${nf(lenE/D2R,0)}°`,10,20,CSS['--accent']);label(ctx,`cuaternión: recorre ${nf(lenS/D2R,0)}°`,10,38,CSS['--cyan']);
+      $('#f38s').textContent=`t = ${st.t.toFixed(2)} → q(t) = (${nf(qs[0],2)}, ${nf(qs[1],2)}, ${nf(qs[2],2)}, ${nf(qs[3],2)}) · camino SLERP ${nf(lenS/D2R,0)}° contra ${nf(lenE/D2R,0)}° con ángulos`;
+    }
+  }};
+})();
+
+/* ================= 3.9 DEFORMACIÓN POR RESPIRACIÓN (warping) ================= */
+(function(){
+  const st={t:0,play:false,grid:true,comp:false},Y9=TUMOR.y,AMP=22,M9=128;
+  const bf=t=>Math.sin(Math.PI*t)**2;
+  function d9(x,z,t){const e=(x/140)**2+(Y9/105)**2;if(e>=1)return[0,0];const wgt=1-e*e,g=clamp((140-z)/270,0,1),b=bf(t);return[6*(x/140)*b*g*wgt,-AMP*b*g*wgt];}
+  const It=(x,z,t)=>{const d=d9(x,z,t);return sampleMM(x-d[0],Y9,z-d[1]);};
+  const cv=$('#cv39'),cp=$('#cv39p');
+  const fE=bindRange('fase39',v=>{st.t=v/100;redraw('*');},v=>v+' %');
+  $('#grid39').addEventListener('change',e=>{st.grid=e.target.checked;redraw('*');});
+  $('#comp39').addEventListener('change',e=>{st.comp=e.target.checked;redraw('*');});
+  let an=0,last=0;const pb=$('#play39 .btn');
+  function loop(now){an=0;if(!st.play||slides[cur].id!=='t3-9'){st.play=false;pb.textContent='▶ Respirar';return;}const dt=last?now-last:0;last=now;st.t=(st.t+dt/4000)%1;fE.value=Math.round(st.t*100);$('#fase39o').textContent=fE.value+' %';redraw('*');an=requestAnimationFrame(loop);}
+  pb.addEventListener('click',()=>{st.play=!st.play;pb.textContent=st.play?'❚❚ Pausar':'▶ Respirar';last=0;if(st.play&&!an)an=requestAnimationFrame(loop);});
+  hooks['t3-9']={leave(){st.play=false;},draw(){
+    const {ctx,w,h}=fit(cv),o=getOff('br',M9,M9),id=o.ctx.createImageData(M9,M9),dd=id.data;
+    for(let r=0;r<M9;r++)for(let c=0;c<M9;c++){const x=-160+(c+.5)/M9*320,z=160-(r+.5)/M9*320;let hu;
+      if(st.comp){const d=d9(x,z,st.t);hu=It(x+d[0],z+d[1],st.t);}else hu=It(x,z,st.t);
+      const g=gray(hu,-300,1400),p=(r*M9+c)*4;dd[p]=dd[p+1]=dd[p+2]=g;dd[p+3]=255;}
+    o.ctx.putImageData(id,0,0);ctx.imageSmoothingEnabled=true;ctx.drawImage(o.c,0,0,w,h);
+    const X=x=>(x+160)/320*w,Z=z=>(160-z)/320*h;
+    if(st.grid){ctx.strokeStyle='rgba(98,210,216,.45)';ctx.lineWidth=1;
+      const P=(x,z)=>{if(st.comp)return[X(x),Z(z)];const d=d9(x,z,st.t);return[X(x+d[0]),Z(z+d[1])];};
+      for(let gx=-140;gx<=140;gx+=20){ctx.beginPath();for(let z=150;z>=-150;z-=10){const p=P(gx,z);z===150?ctx.moveTo(p[0],p[1]):ctx.lineTo(p[0],p[1]);}ctx.stroke();}
+      for(let gz=-140;gz<=140;gz+=20){ctx.beginPath();for(let x=-150;x<=150;x+=10){const p=P(x,gz);x===-150?ctx.moveTo(p[0],p[1]):ctx.lineTo(p[0],p[1]);}ctx.stroke();}
+      if(!st.comp&&st.t>0){ctx.strokeStyle=CSS['--accent'];ctx.lineWidth=1.5;for(let gx=-120;gx<=120;gx+=40)for(let gz=-120;gz<=120;gz+=40){const d=d9(gx,gz,st.t);if(Math.hypot(d[0],d[1])<1)continue;const a=[X(gx),Z(gz)],b=[X(gx+d[0]*1.6),Z(gz+d[1]*1.6)];ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();}}}
+    const dT=d9(TUMOR.x,TUMOR.z,st.t),cur2=st.comp?[TUMOR.x,TUMOR.z]:[TUMOR.x+dT[0],TUMOR.z+dT[1]],rr=TUMOR.r/320*w;
+    ctx.setLineDash([5,4]);ctx.strokeStyle=CSS['--sag'];ctx.lineWidth=2;ctx.beginPath();ctx.arc(X(TUMOR.x),Z(TUMOR.z),rr+3,0,7);ctx.stroke();ctx.setLineDash([]);
+    ctx.strokeStyle='#ffb833';ctx.lineWidth=2.5;ctx.beginPath();ctx.arc(X(cur2[0]),Z(cur2[1]),rr+3,0,7);ctx.stroke();
+    label(ctx,'tumor',X(cur2[0])+rr+8,Z(cur2[1])+4,'#ffb833');
+    label(ctx,st.comp?'compensado: todo vuelve a su lugar':`fase ${Math.round(st.t*100)} % · inspirando: los pulmones bajan`,8,h-10,st.comp?CSS['--sag']:CSS['--fg']);
+    label(ctx,'cabeza ↑',w-8,18,CSS['--muted'],'right');
+    {const t=fit(cp),c2=t.ctx;c2.fillStyle=CSS['--panel-2'];c2.fillRect(0,0,t.w,t.h);const pl=40,pr=12,pt=12,pbm=26,XX=s=>pl+s*(t.w-pl-pr),YY=v=>pt+(v/-12)*(t.h-pt-pbm);
+      c2.strokeStyle=CSS['--line'];c2.font='11px '+MONO;c2.fillStyle=CSS['--muted'];
+      for(const v of[0,-4,-8,-12]){c2.beginPath();c2.moveTo(pl,YY(v));c2.lineTo(t.w-pr,YY(v));c2.stroke();c2.textAlign='right';c2.fillText(v+' mm',pl-4,YY(v)+4);}
+      c2.textAlign='center';c2.fillText('un ciclo de respiración →',(pl+t.w-pr)/2,t.h-6);
+      c2.strokeStyle=CSS['--accent'];c2.lineWidth=2.5;c2.beginPath();for(let n=0;n<=100;n++){const s=n/100,v=d9(TUMOR.x,TUMOR.z,s)[1];n?c2.lineTo(XX(s),YY(v)):c2.moveTo(XX(s),YY(v));}c2.stroke();
+      c2.strokeStyle=CSS['--sag'];c2.beginPath();c2.moveTo(XX(0),YY(0));c2.lineTo(XX(1),YY(0));c2.stroke();
+      c2.fillStyle=st.comp?CSS['--sag']:CSS['--accent'];c2.beginPath();c2.arc(XX(st.t),YY(st.comp?0:dT[1]),6,0,7);c2.fill();}
+    const mv=Math.hypot(dT[0],dT[1]);
+    $('#f39a').textContent=`d(tumor) = (${nf(dT[0],1)}, 0, ${nf(dT[1],1)}) mm en la fase ${Math.round(st.t*100)} %`;
+    $('#f39b').textContent=st.comp?'compensado: el tumor queda en su lugar (0 mm de error)':`p′ = (66, −15, 35) + d = (${nf(66+dT[0],1)}, −15, ${nf(35+dT[1],1)}) mm`;
+    $('#ro39').innerHTML=`<span>fase</span><span>${Math.round(st.t*100)} %</span><span>el tumor se movió</span><span>${st.comp?'0.0 mm (compensado)':nf(mv,1)+' mm'}</span><span>más abajo (diafragma)</span><span>se mueve hasta ${nf(AMP*bf(st.t),1)} mm</span>`;
+  }};
+})();
+
+/* ================= 3.10 WINDOW → VIEWPORT ================= */
+(function(){
+  const st={lay:'4',ww:320,cx:0,cy:0,cz:0,P:[TUMOR.x,TUMOR.y,TUMOR.z],hov:null};
+  const cv=$('#cv310'); const cache={};
+  function vr(yaw){const key='v'+yaw;if(!cache[key]){const im=raycast(120,{yaw,pitch:-.3,mode:'dvr'});const c=document.createElement('canvas');c.width=c.height=120;c.getContext('2d').drawImage(im,0,0);cache[key]=c;}return cache[key];}
+  bindBtns('lay310',d=>{st.lay=d.v;redraw('*');});
+  bindRange('zm310',v=>{st.ww=v;redraw('*');},v=>v+' mm');
+  const NAME={ax:'Axial',cor:'Coronal',sag:'Sagital','3d':'3D',L:'Ojo izquierdo',R:'Ojo derecho'};
+  const COL={ax:'--ax',cor:'--cor',sag:'--sag','3d':'--accent',L:'--accent',R:'--accent'};
+  function vps(w,h){const g=8;
+    if(st.lay==='4'){const s=Math.min((w-g)/2,(h-g)/2),x0=(w-(2*s+g))/2,y0=(h-(2*s+g))/2;return[{k:'ax',x:x0,y:y0,w:s,h:s},{k:'cor',x:x0+s+g,y:y0,w:s,h:s},{k:'sag',x:x0,y:y0+s+g,w:s,h:s},{k:'3d',x:x0+s+g,y:y0+s+g,w:s,h:s}];}
+    if(st.lay==='13'){const s=Math.min(h,(w-g)*.75),sm=(s-2*g)/3,x0=(w-(s+g+sm))/2,y0=(h-s)/2;return[{k:'ax',x:x0,y:y0,w:s,h:s},{k:'cor',x:x0+s+g,y:y0,w:sm,h:sm},{k:'sag',x:x0+s+g,y:y0+sm+g,w:sm,h:sm},{k:'3d',x:x0+s+g,y:y0+2*(sm+g),w:sm,h:sm}];}
+    const s=Math.min((w-g)/2,h),x0=(w-(2*s+g))/2,y0=(h-s)/2;return[{k:'L',x:x0,y:y0,w:s,h:s},{k:'R',x:x0+s+g,y:y0,w:s,h:s}];}
+  // window de cada vista: (a0,b0) = esquina superior izquierda en mm
+  function win(k){const ww=st.ww;if(k==='ax')return{a0:st.cx-ww/2,b0:st.cy-ww/2,an:'x',bn:'y',down:1};if(k==='cor')return{a0:st.cx-ww/2,b0:st.cz+ww/2,an:'x',bn:'z',down:-1};return{a0:st.cy-ww/2,b0:st.cz+ww/2,an:'y',bn:'z',down:-1};}
+  function toWorld(v,u,vv){const wn=win(v.k),s=st.ww/v.w;return[wn.a0+(u-v.x)*s,wn.b0+wn.down*(vv-v.y)*s];}
+  let drag=null;
+  cv.addEventListener('pointerdown',e=>{const r=cv.getBoundingClientRect(),u=e.clientX-r.left,vv=e.clientY-r.top;const v=vps(r.width,r.height).find(v=>u>=v.x&&u<=v.x+v.w&&vv>=v.y&&vv<=v.y+v.h);if(!v||!/ax|cor|sag/.test(v.k))return;drag={v,u,vv,u0:u,v0:vv,moved:false};try{cv.setPointerCapture(e.pointerId);}catch(_){}});
+  cv.addEventListener('pointermove',e=>{const r=cv.getBoundingClientRect(),u=e.clientX-r.left,vv=e.clientY-r.top;
+    if(drag){const du=u-drag.u,dv=vv-drag.vv,s=st.ww/drag.v.w;if(Math.abs(u-drag.u0)+Math.abs(vv-drag.v0)>4)drag.moved=true;
+      if(drag.v.k==='ax'){st.cx-=du*s;st.cy-=dv*s;}else if(drag.v.k==='cor'){st.cx-=du*s;st.cz+=dv*s;}else{st.cy-=du*s;st.cz+=dv*s;}drag.u=u;drag.vv=vv;}
+    const v=vps(r.width,r.height).find(v=>u>=v.x&&u<=v.x+v.w&&vv>=v.y&&vv<=v.y+v.h);st.hov=v?{v,u,vv}:null;redraw('*');});
+  const up=()=>{if(drag&&!drag.moved){const[a,b]=toWorld(drag.v,drag.u0,drag.v0);if(drag.v.k==='ax'){st.P[0]=a;st.P[1]=b;}else if(drag.v.k==='cor'){st.P[0]=a;st.P[2]=b;}else{st.P[1]=a;st.P[2]=b;}redraw('*');}drag=null;};
+  cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',()=>{drag=null;});
+  hooks['t3-10']={draw(){
+    const {ctx,w,h}=fit(cv);ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);
+    const P=st.P,k=clamp(Math.round((P[2]-OZ)/DZ),0,D-1),i=clamp(Math.round((P[1]-OY)/DY),0,H-1),j=clamp(Math.round((P[0]-OX)/DX),0,W-1);
+    const list=vps(w,h);
+    for(const v of list){
+      ctx.save();ctx.beginPath();ctx.rect(v.x,v.y,v.w,v.h);ctx.clip();ctx.fillStyle='#05080b';ctx.fillRect(v.x,v.y,v.w,v.h);ctx.imageSmoothingEnabled=true;
+      if(v.k==='ax'||v.k==='cor'||v.k==='sag'){const wn=win(v.k),ww=st.ww;let img,sx,sy,sw,sh;
+        if(v.k==='ax'){img=sliceImg('ax',k,hu=>gray(hu,40,450));sx=(wn.a0-OX)/DX;sy=(wn.b0-OY)/DY;sw=ww/DX;sh=ww/DY;}
+        else if(v.k==='cor'){img=sliceImg('cor',i,hu=>gray(hu,40,450));sx=(wn.a0-OX)/DX;sy=(D-1)-(wn.b0-OZ)/DZ;sw=ww/DX;sh=ww/DZ;}
+        else{img=sliceImg('sag',j,hu=>gray(hu,40,450));sx=(wn.a0-OY)/DY;sy=(D-1)-(wn.b0-OZ)/DZ;sw=ww/DY;sh=ww/DZ;}
+        ctx.drawImage(img,sx,sy,sw,sh,v.x,v.y,v.w,v.h);
+        const s=v.w/ww,pa=v.k==='sag'?P[1]:P[0],pb=v.k==='ax'?P[1]:P[2],U=v.x+(pa-wn.a0)*s,Vv=v.y+wn.down*(pb-wn.b0)*s;
+        ctx.strokeStyle='rgba(242,184,75,.7)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(U,v.y);ctx.lineTo(U,v.y+v.h);ctx.moveTo(v.x,Vv);ctx.lineTo(v.x+v.w,Vv);ctx.stroke();}
+      else{const img=v.k==='3d'?vr(.6):vr(v.k==='L'?.56:.64);ctx.drawImage(img,v.x,v.y,v.w,v.h);}
+      ctx.restore();
+      ctx.strokeStyle=CSS[COL[v.k]];ctx.lineWidth=2;ctx.strokeRect(v.x+1,v.y+1,v.w-2,v.h-2);
+      label(ctx,NAME[v.k],v.x+8,v.y+18,CSS[COL[v.k]]);
+      if(v.w>200)label(ctx,`viewport ${Math.round(v.w)}×${Math.round(v.h)} px`,v.x+8,v.y+v.h-8,CSS['--muted']);
+    }
+    const hv=st.hov&&/ax|cor|sag/.test(st.hov.v.k)?st.hov:{v:list.find(v=>/ax|L/.test(v.k)),u:null};
+    const v=hv.v;if(!v)return;
+    if(/ax|cor|sag/.test(v.k)){const wn=win(v.k),s=v.w/st.ww,[a]=hv.u!==null?toWorld(v,hv.u,hv.vv):[v.k==='sag'?P[1]:P[0]],u=v.x+(a-wn.a0)*s;
+      if(hv.u!==null){ctx.fillStyle=CSS['--cyan'];ctx.beginPath();ctx.arc(hv.u,hv.vv,5,0,7);ctx.fill();}
+      $('#f310').textContent=`${wn.an} = ${nf(a,1)} mm → u = ${nf(v.x,0)} + (${nf(a,1)} − ${nf(wn.a0,1)}) · ${nf(v.w,0)}/${st.ww} = ${nf(u,0)} px`;
+      $('#ro310').innerHTML=`<span>viewport (${NAME[v.k]})</span><span>esquina (${nf(v.x,0)}, ${nf(v.y,0)}) px · tamaño ${nf(v.w,0)} × ${nf(v.h,0)} px</span><span>window</span><span>${wn.an} de ${nf(wn.a0,0)} a ${nf(wn.a0+st.ww,0)} mm (${st.ww} mm de ancho)</span><span>escala Vw / Ww</span><span>${nf(v.w,0)} / ${st.ww} = ${nf(s,2)} px por mm</span>`;}
+    else{$('#f310').textContent='en VR cada ojo es un viewport: la misma cuenta, con la cámara corrida unos milímetros';
+      $('#ro310').innerHTML=`<span>viewports</span><span>2 (uno por ojo)</span><span>diferencia</span><span>la cámara de cada ojo gira 2.3° distinto → el cerebro lo ve en 3D</span>`;}
+  }};
+})();
+
+/* ================= 3.11 VERIFICACIONES GEOMÉTRICAS ================= */
+(function(){
+  const st={tab:'roi',P:[60,-10],O:[150,-140],C:[-150,30],ang:0,fov:50};
+  const ROI={x0:45,x1:87,y0:-36,y1:6}, cv=$('#cv311');
+  bindBtns('tab311',d=>{st.tab=d.v;$('#fc311').hidden=st.tab!=='fru';redraw('*');});
+  bindRange('ang311',v=>{st.ang=v;redraw('*');},v=>v+'°');bindRange('fov311',v=>{st.fov=v;redraw('*');},v=>v+'°');
+  const mm=e=>{const[a,b]=pos(e,cv);return[OX+a*W*DX,OY+b*H*DY];};
+  cv.addEventListener('pointermove',e=>{st.P=mm(e);redraw('*');});
+  cv.addEventListener('pointerdown',e=>{const p=mm(e);if(st.tab==='ray')st.O=p;else if(st.tab==='fru')st.C=p;else st.P=p;redraw('*');});
+  const ok=b=>b?'<b class="ok">✓</b>':'<b class="bad">✗</b>';
+  hooks['t3-11']={draw(){
+    const {ctx,w,h}=fit(cv);ctx.imageSmoothingEnabled=true;ctx.drawImage(sliceImg('ax',39,hu=>gray(hu,40,500)*.8),0,0,w,h);
+    const S=p=>[(p[0]-OX)/(W*DX)*w,(p[1]-OY)/(H*DY)*h],sc=w/(W*DX),P=st.P;
+    const box=(col,fill)=>{const a=S([ROI.x0,ROI.y0]),b=S([ROI.x1,ROI.y1]);ctx.fillStyle=fill;ctx.fillRect(a[0],a[1],b[0]-a[0],b[1]-a[1]);ctx.strokeStyle=col;ctx.lineWidth=2.5;ctx.strokeRect(a[0],a[1],b[0]-a[0],b[1]-a[1]);label(ctx,'caja de interés (ROI)',a[0],a[1]-6,col);};
+    if(st.tab==='roi'){
+      const ix=P[0]>=ROI.x0&&P[0]<=ROI.x1,iy=P[1]>=ROI.y0&&P[1]<=ROI.y1,inside=ix&&iy,col=inside?CSS['--sag']:CSS['--ax'];
+      box(col,inside?'rgba(82,216,136,.15)':'rgba(255,107,107,.08)');
+      const p=S(P);ctx.fillStyle=col;ctx.beginPath();ctx.arc(p[0],p[1],7,0,7);ctx.fill();label(ctx,inside?'DENTRO':'FUERA',p[0]+10,p[1]-8,col);
+      $('#t311h').textContent='Punto en caja · mueve el mouse';
+      $('#ro311').innerHTML=`<span>en x</span><span>${ROI.x0} ≤ ${nf(P[0],1)} ≤ ${ROI.x1} ${ok(ix)}</span><span>en y</span><span>${ROI.y0} ≤ ${nf(P[1],1)} ≤ ${ROI.y1} ${ok(iy)}</span><span>resultado</span><span>${inside?'<b class="ok">el punto está DENTRO</b>':'<b class="bad">el punto está FUERA</b>'}</span>`;
+      $('#h311').textContent='Basta que falle un eje para estar fuera. En 3D se agrega la misma prueba en z. Así el sistema sabe si el médico tocó la zona del tumor.';
+      $('#f311').textContent=`xmin ≤ x ≤ xmax  y  ymin ≤ y ≤ ymax → ${inside?'dentro':'fuera'}`;
+    } else if(st.tab==='ray'){
+      const O=st.O,d=norm3([P[0]-O[0],P[1]-O[1],0]),dx=d[0]||1e-9,dy=d[1]||1e-9;
+      let tx1=(ROI.x0-O[0])/dx,tx2=(ROI.x1-O[0])/dx,ty1=(ROI.y0-O[1])/dy,ty2=(ROI.y1-O[1])/dy;if(tx1>tx2)[tx1,tx2]=[tx2,tx1];if(ty1>ty2)[ty1,ty2]=[ty2,ty1];
+      const tn=Math.max(tx1,ty1),tf=Math.min(tx2,ty2),hit=tn<=tf&&tf>=0;
+      ctx.setLineDash([4,4]);ctx.lineWidth=1;ctx.strokeStyle='rgba(94,161,255,.6)';[ROI.x0,ROI.x1].forEach(x=>{const a=S([x,-160]),b=S([x,160]);ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();});
+      ctx.strokeStyle='rgba(82,216,136,.6)';[ROI.y0,ROI.y1].forEach(y=>{const a=S([-160,y]),b=S([160,y]);ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();});ctx.setLineDash([]);
+      box(hit?CSS['--sag']:CSS['--muted'],hit?'rgba(82,216,136,.12)':'rgba(0,0,0,0)');
+      const o=S(O),far=S([O[0]+d[0]*700,O[1]+d[1]*700]);ctx.strokeStyle='rgba(242,184,75,.55)';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(o[0],o[1]);ctx.lineTo(far[0],far[1]);ctx.stroke();
+      const at=t=>S([O[0]+d[0]*t,O[1]+d[1]*t]);
+      [[tx1,'--cor'],[tx2,'--cor'],[ty1,'--sag'],[ty2,'--sag']].forEach(([t,c])=>{if(t<0||t>700)return;const p=at(t);ctx.fillStyle=CSS[c];ctx.beginPath();ctx.arc(p[0],p[1],4.5,0,7);ctx.fill();});
+      if(hit){const a=at(Math.max(0,tn)),b=at(tf);ctx.strokeStyle=CSS['--accent'];ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();label(ctx,'entra',a[0]+8,a[1]-6,CSS['--accent']);label(ctx,'sale',b[0]+8,b[1]-6,CSS['--accent']);}
+      ctx.fillStyle=CSS['--fg'];ctx.beginPath();ctx.arc(o[0],o[1],6,0,7);ctx.fill();label(ctx,'origen del rayo (clic para mover)',o[0]-8,o[1]+18,CSS['--fg'],'right');
+      $('#t311h').textContent='Rayo contra caja · el mouse apunta el rayo';
+      $('#ro311').innerHTML=`<span>paredes en x</span><span>entra t = ${nf(tx1,0)}, sale t = ${nf(tx2,0)} mm</span><span>paredes en y</span><span>entra t = ${nf(ty1,0)}, sale t = ${nf(ty2,0)} mm</span><span>entra (el mayor)</span><span>${nf(tn,0)} mm</span><span>sale (el menor)</span><span>${nf(tf,0)} mm</span><span>resultado</span><span>${hit?'<b class="ok">el rayo atraviesa la caja</b>':'<b class="bad">el rayo no toca la caja</b>'}</span>`;
+      $('#h311').textContent='Puntos azules: cruces con las paredes de x. Puntos verdes: cruces con las de y. El rayo está dentro solo donde los dos tramos se solapan. El render usa esta misma prueba para saber dónde empezar y terminar cada rayo.';
+      $('#f311').textContent=`t entrada = máx(${nf(tx1,0)}, ${nf(ty1,0)}) = ${nf(tn,0)} · t salida = mín(${nf(tx2,0)}, ${nf(ty2,0)}) = ${nf(tf,0)} → ${hit?'choca':'no choca'}`;
+    } else {
+      const C=st.C,a=st.ang*D2R,hf=st.fov*D2R/2,far=380,f=[Math.cos(a),Math.sin(a)];
+      const rot=(v,t)=>[v[0]*Math.cos(t)-v[1]*Math.sin(t),v[0]*Math.sin(t)+v[1]*Math.cos(t)];
+      const planes=[rot(f,hf),rot(f,-hf)].map(e=>{let n=[-e[1],e[0]];if(n[0]*f[0]+n[1]*f[1]<0)n=[-n[0],-n[1]];return{n,q:C};});
+      planes.push({n:[-f[0],-f[1]],q:[C[0]+f[0]*far,C[1]+f[1]*far]});
+      const sd=(pl,p)=>pl.n[0]*(p[0]-pl.q[0])+pl.n[1]*(p[1]-pl.q[1]);
+      let kept=0;
+      for(let bi=0;bi<8;bi++)for(let bj=0;bj<8;bj++){const x0=-160+bj*40,y0=-160+bi*40,cs=[[x0,y0],[x0+40,y0],[x0+40,y0+40],[x0,y0+40]];
+        const culled=planes.some(pl=>cs.every(p=>sd(pl,p)<0));if(!culled)kept++;
+        const a0=S([x0,y0]);ctx.fillStyle=culled?'rgba(0,0,0,.6)':'rgba(82,216,136,.18)';ctx.fillRect(a0[0]+1,a0[1]+1,40*sc-2,40*sc-2);ctx.strokeStyle=culled?'rgba(147,164,182,.15)':'rgba(82,216,136,.6)';ctx.lineWidth=1;ctx.strokeRect(a0[0]+1,a0[1]+1,40*sc-2,40*sc-2);}
+      const tip=(t)=>{const e=rot(f,t),L=far/Math.cos(hf);return S([C[0]+e[0]*L,C[1]+e[1]*L]);},c=S(C),l=tip(hf),r=tip(-hf);
+      ctx.fillStyle='rgba(242,184,75,.12)';ctx.strokeStyle=CSS['--accent'];ctx.lineWidth=2.5;ctx.beginPath();ctx.moveTo(c[0],c[1]);ctx.lineTo(l[0],l[1]);ctx.lineTo(r[0],r[1]);ctx.closePath();ctx.fill();ctx.stroke();
+      ctx.fillStyle=CSS['--accent'];ctx.beginPath();ctx.arc(c[0],c[1],7,0,7);ctx.fill();label(ctx,'cámara (clic para mover)',c[0]+10,c[1]+22,CSS['--accent']);
+      $('#t311h').textContent='Frustum culling · lo que la cámara ve';
+      $('#ro311').innerHTML=`<span>bloques en total</span><span>64</span><span>se procesan</span><span><b class="ok">${kept}</b></span><span>se descartan</span><span>${64-kept} (${nf((64-kept)/64*100,0)} % menos trabajo)</span>`;
+      $('#h311').textContent='La vista de la cámara es una pirámide (en 2D, un triángulo) formada por planos. Un bloque se descarta si todas sus esquinas quedan del lado de afuera de algún plano: la misma prueba π·p de 3.5. Así el casco VR mantiene 90 imágenes por segundo.';
+      $('#f311').textContent=`bloque descartado si todas sus esquinas dan π·p < 0 en algún plano → ${kept} de 64 se procesan`;
+    }
+  }};
+})();
+
+/* ================= pasos tocables (en el panel de conceptos) ================= */
+(function(){
+  function flashEl(el){if(!el)return;el.classList.remove('flash');void el.offsetWidth;el.classList.add('flash');}
+  function run(spec){
+    const [k,...a]=spec.split(':');
+    if(k==='btn'){const b=$$('#'+a[0]+' .btn')[+a[1]];if(b){flashEl(b);b.click();}}
+    else if(k==='range'){const el=$('#'+a[0]);if(!el)return;flashEl(el.closest('.ctl')||el);el.value=a[1];el.dispatchEvent(new Event('input'));}
+    else if(k==='check'){const el=$('#'+a[0]);if(!el)return;flashEl(el.parentElement);el.checked=a[1]==='1';el.dispatchEvent(new Event('change'));}
+    else if(k==='ptr'){const cv=$('#'+a[0]);if(!cv)return;const r=cv.getBoundingClientRect();flashEl(cv);cv.dispatchEvent(new PointerEvent(a[3]||'pointerdown',{clientX:r.left+(+a[1])*r.width,clientY:r.top+(+a[2])*r.height,bubbles:true,pointerId:7}));if((a[3]||'pointerdown')==='pointerdown')cv.dispatchEvent(new PointerEvent('pointerup',{clientX:r.left+(+a[1])*r.width,clientY:r.top+(+a[2])*r.height,bubbles:true,pointerId:7}));}
+  }
+  document.addEventListener('click',e=>{
+    const li=e.target.closest('ol.steps li');if(!li)return;
+    $$('li',li.parentElement).forEach(x=>x.classList.toggle('cur',x===li));
+    if(!li.dataset.act)return;flashEl(li);
+    li.dataset.act.split('|').forEach((s,n)=>setTimeout(()=>{try{run(s);}catch(err){console.error(err);}},n*650));
+  });
+})();
+
+hooks.resumen={draw(){}};
+
+/* ================= ENSAYO GUIADO (voz + subtítulos + clics automáticos) ================= */
+(function(){
+  const bar=document.createElement('div'); bar.id='tour'; bar.hidden=true;
+  bar.innerHTML='<div class="tt"><span class="kicker" id="tourWho"></span><p id="tourTxt"></p></div><div class="tc"><button class="nav" id="tourPause">Pausa</button><button class="nav" id="tourNext">Siguiente</button><button class="nav" id="tourExit">Salir</button></div>';
+  document.body.appendChild(bar);
+  function flash(el){if(!el)return;el.classList.remove('flash');void el.offsetWidth;el.classList.add('flash');try{el.scrollIntoView({block:'nearest',behavior:'smooth'});}catch(e){}}
+  const goTo=id=>()=>go(slides.findIndex(s=>s.id===id));
+  const btn=(box,i)=>()=>{const b=$$('#'+box+' .btn')[i];flash(b);b.click();};
+  const range=(id,v)=>()=>{const el=$('#'+id);flash(el.closest('.ctl')||el);el.value=v;el.dispatchEvent(new Event('input'));};
+  const check=(id,v)=>()=>{const el=$('#'+id);flash(el.parentElement);el.checked=v;el.dispatchEvent(new Event('change'));};
+  const ptr=(id,fx,fy,type)=>()=>{const cv=$('#'+id),r=cv.getBoundingClientRect();flash(cv);cv.dispatchEvent(new PointerEvent(type||'pointerdown',{clientX:r.left+fx*r.width,clientY:r.top+fy*r.height,bubbles:true,pointerId:7}));};
+  const step=i=>()=>{const b=$$('#pipe .step')[i];flash(b);b.click();};
+  const A='Persona A',B='Persona B';
+  const STEPS=[
+    {w:A,a:[goTo('portada')],t:'Buenos días. Nuestro proyecto es un sistema de visualización y planificación quirúrgica en realidad virtual, a partir de tomografías. Hoy presentamos sus bases matemáticas.'},
+    {w:A,t:'Lo que ven girando es un tórax en 3D. No es un video: se calcula en vivo con la misma matemática que vamos a explicar. El hueso está en blanco, la aorta en rojo y el tumor en amarillo.'},
+    {w:A,t:'Los datos son simulados, porque no podemos usar datos de pacientes reales, pero la matemática es exactamente la misma.'},
+    {w:A,a:[goTo('proyecto')],t:'El problema: el médico ve la tomografía en tajadas 2D, en una pantalla plana, y tiene que imaginarse el cuerpo en 3D. Los sistemas actuales son caros y no revisan si una aguja va a chocar con algo importante.'},
+    {w:A,a:[step(0)],t:'Nuestra solución es un pipeline: una cadena de pasos donde lo que sale de uno entra al siguiente. Primero cargamos los archivos DICOM.'},
+    {w:A,a:[step(3)],t:'Después dibujamos el volumen en 3D.'},
+    {w:A,a:[step(5)],t:'Y al final verificamos la cirugía: distancias y choques.'},
+    {w:A,t:'Cada paso del pipeline usa uno o más temas de matemática. Vamos a verlos uno por uno.'},
+    {w:A,a:[goTo('datos')],t:'Así llegan los datos. A la izquierda está la pila de tajadas; a la derecha, la tajada elegida. Cada tajada es un archivo DICOM, y abajo está su cabecera.'},
+    {w:A,a:[range('k2',10)],t:'Al mover la tajada cambia el último número de ImagePositionPatient: es la altura en milímetros.'},
+    {w:A,a:[range('k2',39)],t:'De la cabecera usamos la posición, el tamaño del pixel, que es 2.5 milímetros, y la separación entre tajadas, que es 5 milímetros.'},
+    {w:A,a:[goTo('t3-1')],t:'Tema 3.1. La pregunta es: ¿cómo encuentra el sistema el tumor entre millones de números?'},
+    {w:A,a:[ptr('cv31',.707,.457,'pointermove')],t:'Para la computadora, una imagen es una matriz. Esta tabla son los números reales alrededor del cursor. Si apilamos todas las tajadas tenemos un tensor de tres dimensiones.'},
+    {w:A,t:'Primero pasamos todo a unidades Hounsfield: el aire vale menos mil, el agua cero y el hueso unos setecientos.'},
+    {w:A,a:[btn('pre31',0)],t:'Después viene el ventaneo. La pantalla solo tiene 256 grises, así que elegimos un rango. Así se ve el pulmón.'},
+    {w:A,a:[btn('pre31',2)],t:'Y así se ve el hueso.'},
+    {w:A,a:[btn('pre31',1),btn('segp31',0)],t:'Para encontrar el tumor usamos un umbral: marcamos los voxels entre 75 y 125. Contándolos y multiplicando por el volumen de un voxel sale su tamaño: unos 17 centímetros cúbicos.'},
+    {w:A,t:'Frase clave: la imagen es una matriz, el volumen es un tensor, y con operaciones sobre los números vemos y medimos el tumor.'},
+    {w:A,a:[goTo('t3-2')],t:'Tema 3.2. ¿Cómo sabe el sistema dónde está cada punto en el cuerpo real? El tensor solo tiene posiciones de tabla, pero para operar necesitamos milímetros.'},
+    {w:A,a:[ptr('cv32a',.707,.457)],t:'La fórmula es: posición igual a origen más índice por tamaño del voxel. La columna 90 está en x igual a menos 160 más 90 por 2.5, es decir, 65 milímetros.'},
+    {w:A,a:[btn('dz32',1)],t:'Cuidado: los voxels miden 5 milímetros de alto, no 2.5. Si los tratamos como cubos, el cuerpo sale aplastado.'},
+    {w:A,a:[btn('dz32',0)],t:'Respetando el tamaño real, la proporción es correcta. Frase clave: posición igual a origen más índice por tamaño; todo se trabaja en milímetros.'},
+    {w:B,a:[goTo('t3-3')],t:'Tema 3.3, vectores. ¿Cómo encuentra el sistema los bordes, y cómo sabe si la aguja choca?'},
+    {w:B,a:[ptr('cv33a',.47,.41,'pointermove')],t:'El gradiente es una flecha que apunta hacia donde los números suben más rápido. Dentro de un órgano es casi cero.'},
+    {w:B,a:[ptr('cv33a',.17,.48,'pointermove')],t:'En un borde, en cambio, es grande.'},
+    {w:B,a:[btn('mode33',1)],t:'Aquí se ve: lo blanco son los bordes de los órganos.'},
+    {w:B,a:[btn('mode33',0),range('az33',-60)],t:'Si normalizamos el gradiente obtenemos la normal, y el brillo de la superficie es el producto punto entre la normal y la luz. Al mover la luz cambian las sombras.'},
+    {w:B,a:[range('az33',35),btn('nd33',0)],t:'Lo más importante es la aguja. Va de la entrada E al tumor T. Para cada estructura peligrosa calculamos, con producto punto, el punto de la aguja más cercano y su distancia. Aquí la aorta queda a 56 milímetros: trayectoria segura.'},
+    {w:B,a:[btn('nd33',1)],t:'Desde atrás, la aguja atraviesa la columna y la aorta. Recorriéndola milímetro a milímetro, el sistema encuentra hueso a los 17 milímetros: alerta.'},
+    {w:B,a:[btn('nd33',2)],t:'Desde adelante pasa a 5 milímetros del esternón, menos del margen de 10: también alerta.'},
+    {w:B,a:[btn('nd33',0)],t:'Frase clave: el gradiente encuentra bordes, y el producto punto ilumina y mide qué tan cerca pasa la aguja.'},
+    {w:B,a:[goTo('t3-4')],t:'Tema 3.4. ¿Cómo muestra el sistema el cuerpo de frente y de costado, si el tomógrafo solo da tajadas horizontales? Con matrices.'},
+    {w:B,a:[ptr('cv34a',.5,.62)],t:'Cada vista es una matriz que elige dos ejes del mismo tensor. Al hacer clic en una vista se mueven las líneas en las otras dos.'},
+    {w:B,a:[check('sc34',false)],t:'La matriz de escala corrige el tamaño. Sin ella, las vistas de frente y de costado salen aplastadas.'},
+    {w:B,a:[check('sc34',true)],t:'Y cuando el médico gira la cabeza, cada punto se multiplica por la matriz de rotación, que se ve aquí en vivo. Estas matrices se pueden juntar en una sola multiplicación, y el orden importa.'},
+    {w:B,a:[ptr('cv34a',.707,.457)],t:'Frase clave: las tres vistas salen del mismo tensor; las matrices solo cambian el orden, el tamaño o el giro.'},
+    {w:B,a:[goTo('t3-5')],t:'Tema 3.5. ¿Cómo corta el sistema el cuerpo con un plano y avisa si toca el tumor?'},
+    {w:B,a:[range('vj35',60)],t:'Girar y escalar son multiplicaciones, pero trasladar es una suma. El truco de las coordenadas homogéneas es agregar un 1 al punto: así todo cabe en una matriz de 4 por 4, y cada voxel pasa a milímetros en una sola multiplicación.'},
+    {w:B,a:[range('vj35',90)],t:'La inversa hace el camino al revés, de milímetros a voxel, y se usa para dibujar el 3D.'},
+    {w:B,a:[range('th35',85),range('ph35',40)],t:'El plano de corte lo mueve el médico con el control de realidad virtual. Para saber de qué lado está un punto se calcula pi por p: si es positivo, está delante y se oculta; si es negativo, está detrás y se ve. A la derecha está el corte que vería el médico.'},
+    {w:B,a:[range('th35',55),range('ph35',15),range('d35',70)],t:'Si la distancia del centro del tumor al plano es menor que su radio, el plano atraviesa el tumor, y el sistema avisa.'},
+    {w:B,a:[range('d35',40)],t:'Frase clave: con un 1 extra, una matriz de 4 por 4 hace todo; y el signo de pi por p dice de qué lado está cada punto.'},
+    {w:B,a:[goTo('resumen')],t:'En resumen: cada tema es un paso del pipeline. Con 3.1 vemos y medimos el tumor; con 3.2 todo está en milímetros; con 3.3 encontramos bordes, iluminamos y verificamos la aguja; con 3.4 mostramos el cuerpo desde cualquier lado; y con 3.5 juntamos todo en una matriz y cortamos con un plano.'},
+    {w:B,t:'Gracias. ¿Preguntas?'}
+  ];
+  const synth=window.speechSynthesis; let voice=null;
+  function pickVoice(){try{const vs=synth?synth.getVoices():[];voice=vs.find(v=>/es[-_](ES|MX|US|419)/i.test(v.lang)&&/helena|sabina|google|natural/i.test(v.name))||vs.find(v=>/^es/i.test(v.lang))||null;}catch(e){voice=null;}}
+  if(synth){pickVoice();synth.onvoiceschanged=pickVoice;}
+  const spoken=t=>t.replace(/(\d)\.(\d)/g,'$1 punto $2').replace(/2D/g,'2 D').replace(/3D/g,'3 D');
+  let idx=0,running=false,paused=false,token=0,timer=0;
+  function sentences(t){return t.match(/[^.!?¿¡:;]+[.!?:;]?|[¿¡][^?!]+[?!]/g)||[t];}
+  function play(){
+    const my=++token; const s=STEPS[idx]; if(!s){stop();return;}
+    $('#tourWho').textContent=`${s.w} · paso ${idx+1} de ${STEPS.length}`; $('#tourTxt').textContent=s.t;
+    (s.a||[]).forEach((f,n)=>setTimeout(()=>{if(my===token)try{f();}catch(e){console.error(e);}},n*700));
+    const next=()=>{if(my!==token||paused)return;timer=setTimeout(()=>{if(my===token&&!paused){idx++;play();}},700);};
+    if(synth&&voice){
+      try{synth.cancel();}catch(e){}
+      const parts=sentences(s.t);let p=0;
+      const say=()=>{if(my!==token||paused)return;if(p>=parts.length){next();return;}const u=new SpeechSynthesisUtterance(spoken(parts[p++]));u.voice=voice;u.lang=voice.lang;u.rate=1;u.onend=say;u.onerror=say;synth.speak(u);};
+      setTimeout(say,(s.a||[]).length?500:100);
+    } else { timer=setTimeout(next,Math.max(2500,s.t.length*62)); }
+  }
+  function start(){idx=0;running=true;paused=false;bar.hidden=false;$('#tourPause').textContent='Pausa';play();}
+  function stop(){running=false;token++;clearTimeout(timer);try{synth&&synth.cancel();}catch(e){}bar.hidden=true;}
+  $('#tourBtn').addEventListener('click',()=>{if(running)stop();else start();});
+  $('#tourExit').addEventListener('click',stop);
+  $('#tourNext').addEventListener('click',()=>{token++;clearTimeout(timer);try{synth&&synth.cancel();}catch(e){}paused=false;$('#tourPause').textContent='Pausa';idx++;play();});
+  $('#tourPause').addEventListener('click',()=>{
+    if(!paused){paused=true;token++;clearTimeout(timer);try{synth&&synth.cancel();}catch(e){}$('#tourPause').textContent='Continuar';}
+    else{paused=false;$('#tourPause').textContent='Pausa';play();}
+  });
+})();
+
+/* ================= inicio ================= */
+(function(){const id=(location.hash||'').slice(1);const n=slides.findIndex(s=>s.id===id);go(n>=0?n:0);})();
+</script>
+</body>
+</html>
